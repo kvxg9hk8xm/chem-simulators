@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>溶解度と再結晶：KNO₃とCuSO₄・5H₂Oの析出と比例関係シミュレーター</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Noto Sans JP', 'Inter', sans-serif;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .light-mode .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            color: #0f172a;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.2); }
+        ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.8); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 数式ハイライト用ボタン */
+        .formula-part {
+            transition: all 0.18s ease;
+            cursor: pointer;
+            border-radius: 0.375rem;
+            padding: 0.1rem 0.35rem;
+        }
+        .formula-part:hover {
+            transform: translateY(-1px);
+        }
+        .formula-active {
+            outline: 2px solid #facc15;
+            background: rgba(250, 204, 21, 0.22);
+            box-shadow: 0 0 12px rgba(250, 204, 21, 0.35);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen overflow-hidden flex flex-col relative transition-colors duration-300" id="app-body">
+
+    <!-- =====================================================================
+         上部ヘッダー（モード切替：例題1 KNO3 / 例題2 CuSO4・5H2O / 両者の比較＆練習問題）
+    ====================================================================== -->
+    <header class="w-full px-3 pt-2 pb-1.5 z-20 flex flex-wrap items-center justify-between gap-2 shrink-0 border-b border-slate-800/80 bg-slate-900/95 backdrop-blur-md">
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full py-0.5">
+            <a href="index.html" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition shrink-0" title="目次ポータルへ戻る">
+                <i class="fa-solid fa-house text-sky-400"></i>
+                <span class="hidden sm:inline">目次</span>
+            </a>
+
+            <!-- 4つの学習モードタブ -->
+            <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 shrink-0">
+                <button id="tab-ex1" onclick="selectMode('ex1')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-amber-500 text-slate-950 shadow flex items-center gap-1.5">
+                    <i class="fa-solid fa-vial"></i>
+                    <span>例題1：硝酸カリウム KNO₃ <span class="hidden md:inline font-normal opacity-90">(無水物・水不変)</span></span>
+                </button>
+                <button id="tab-ex2" onclick="selectMode('ex2')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white hover:bg-slate-800/70 flex items-center gap-1.5">
+                    <i class="fa-solid fa-gem text-sky-400"></i>
+                    <span>例題2：硫酸銅(II)五水和物 <span class="hidden md:inline font-normal opacity-90">(水和物・水が減る!)</span></span>
+                </button>
+                <button id="tab-compare" onclick="selectMode('compare')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-emerald-300 hover:text-white hover:bg-slate-800/70 flex items-center gap-1.5 border border-emerald-500/30">
+                    <i class="fa-solid fa-scale-balanced"></i>
+                    <span>徹底比較：KNO₃ vs CuSO₄・5H₂O</span>
+                </button>
+                <button id="tab-practice" onclick="selectMode('practice')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-purple-300 hover:text-white hover:bg-slate-800/70 flex items-center gap-1.5 border border-purple-500/30">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                    <span>教科書の問4・問5・問6</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 右側：立式アプローチ切替 ＆ 解説ドロワー -->
+        <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+            <div class="hidden lg:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 text-[11px]">
+                <span class="text-slate-400 px-1.5 font-medium">比例の着目箇所:</span>
+                <button id="btn-eq-sol" onclick="setEquationType('solution')" class="px-2.5 py-1 rounded-lg bg-sky-600 text-white font-bold transition">
+                    教科書式：溶質 / 溶液
+                </button>
+                <button id="btn-eq-water" onclick="setEquationType('water')" class="px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition">
+                    別解：溶質 / 溶媒(水)
+                </button>
+            </div>
+
+            <button onclick="toggleDrawer()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition shadow flex items-center gap-1.5">
+                <i class="fa-solid fa-book-open"></i>
+                <span>立式の考え方・解説</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- =====================================================================
+         練習問題（問4・問5・問6）選択サブバー（practiceモード時のみ表示）
+    ====================================================================== -->
+    <div id="practice-subbar" class="hidden w-full px-4 py-1.5 bg-slate-900/95 border-b border-slate-800 z-10 flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="font-bold text-purple-300"><i class="fa-solid fa-list-check mr-1"></i>教科書の練習問題を選択:</span>
+            <button id="btn-q4" onclick="selectPractice('q4')" class="px-3 py-1 rounded-lg bg-purple-600 text-white font-bold transition">
+                問4：ホウ酸 H₃BO₃ 200gの冷却 (70℃→10℃)
+            </button>
+            <button id="btn-q5" onclick="selectPractice('q5')" class="px-3 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-semibold transition border border-slate-700">
+                問5：塩化ナトリウム NaCl 水20gの蒸発 (80℃一定)
+            </button>
+            <button id="btn-q6" onclick="selectPractice('q6')" class="px-3 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-semibold transition border border-slate-700">
+                問6：CuSO₄・5H₂O 50gから60℃飽和溶液をつくる水
+            </button>
+        </div>
+        <div id="practice-problem-text" class="text-[11px] text-amber-300 font-medium">
+            問4：ホウ酸の溶解度は70℃で20、10℃で5.0。70℃の飽和水溶液200gを10℃に冷却すると何g析出するか。
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         メインビューポート（左7列：ビーカー＆比例関係バー / 右5列：立式ハイライト＆溶解度曲線）
+    ====================================================================== -->
+    <main class="flex-1 w-full overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2 p-2 sm:p-2.5 bg-slate-950 relative">
+        
+        <!-- 左側（7列）：ビーカー・溶媒変化・比例ブロック視覚化 Canvas -->
+        <section class="lg:col-span-7 relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-900/70 flex flex-col min-h-[270px]">
+            <!-- 上部ステータス＆注目バッジ -->
+            <div class="px-3 py-1.5 bg-slate-900/95 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs z-10">
+                <div class="flex items-center gap-2">
+                    <span id="mode-badge" class="px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        例題1：KNO₃（無水物結晶）
+                    </span>
+                    <span id="solvent-alert-badge" class="px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px]">
+                        ★ 結晶が析出しても「溶媒(水)の質量」は変化しない！
+                    </span>
+                </div>
+                <div class="flex items-center gap-2 text-[11px]">
+                    <span class="text-slate-400">現在の温度:</span>
+                    <strong id="temp-readout" class="text-sm font-mono text-rose-400">20 ℃</strong>
+                </div>
+            </div>
+
+            <!-- メイン視覚化 Canvas（ビーカー ＆ 基準飽和溶液との比例バー） -->
+            <div class="flex-1 relative w-full h-full overflow-hidden" id="beaker-canvas-wrap">
+                <canvas id="beaker-canvas" class="w-full h-full block"></canvas>
+            </div>
+        </section>
+
+        <!-- 右側（5列）：インタラクティブ立式ボード（上段） ＆ 溶解度曲線グラフ（下段） -->
+        <section class="lg:col-span-5 flex flex-col gap-2 overflow-hidden min-h-[270px]">
+            
+            <!-- 右上：どこで比例関係が成り立っているか？ インタラクティブ立式カード -->
+            <div class="rounded-2xl border border-slate-800 bg-slate-900/85 p-3 flex flex-col justify-between shrink-0 shadow-lg">
+                <div class="flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5 mb-2">
+                    <div class="font-bold text-xs text-sky-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-square-root-variable"></i>
+                        <span id="eq-panel-title">立式の比例関係（式をタップすると左図の対応箇所が光ります）</span>
+                    </div>
+                    <div class="flex lg:hidden items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 gap-1 text-[10px]">
+                        <button onclick="setEquationType('solution')" id="btn-eq-sol-sm" class="px-2 py-0.5 rounded bg-sky-600 text-white font-bold">溶質/溶液</button>
+                        <button onclick="setEquationType('water')" id="btn-eq-wat-sm" class="px-2 py-0.5 rounded text-slate-400">溶質/水</button>
+                    </div>
+                </div>
+
+                <!-- 比例式の動的HTML表示エリア -->
+                <div id="interactive-equation-container" class="my-1">
+                    <!-- JSでモードに応じた美しい分数比例式とハイライトボタンを描画 -->
+                </div>
+
+                <!-- ハイライト箇所のワンポイント解説バー -->
+                <div id="highlight-explanation" class="mt-2 px-3 py-1.5 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] text-amber-300 flex items-center gap-2">
+                    <i class="fa-solid fa-hand-pointer text-amber-400 shrink-0"></i>
+                    <span>上の比例式の<strong>分子・分母の枠</strong>をクリックすると、左のビーカーと棒グラフのどこを比べているかがハイライトされます。</span>
+                </div>
+            </div>
+
+            <!-- 右下：溶解度曲線と温度別内訳グラフ Canvas -->
+            <div class="flex-1 relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-900/70 flex flex-col min-h-[160px]">
+                <div class="px-3 py-1 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between text-[11px]">
+                    <span class="font-bold text-slate-200"><i class="fa-solid fa-chart-area text-amber-400 mr-1"></i>溶解度曲線（水100gあたり）と析出量の関係</span>
+                    <span class="text-slate-400 text-[10px]">グラフ上をクリック/ドラッグして温度変更</span>
+                </div>
+                <div class="flex-1 relative w-full h-full overflow-hidden" id="curve-canvas-wrap">
+                    <canvas id="curve-canvas" class="w-full h-full block cursor-pointer"></canvas>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- =====================================================================
+         下部コントロールバー（温度スライダー 60℃ ⇄ 20℃・アニメーション再生・プリセット）
+    ====================================================================== -->
+    <footer class="w-full px-3 sm:px-4 py-2 bg-slate-900 border-t border-slate-800 z-20 shrink-0">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-3">
+            
+            <!-- 冷却・加熱アニメーション再生ボタン -->
+            <div class="flex items-center gap-1.5 shrink-0">
+                <button id="btn-cool" onclick="startTempAnim(-1)" class="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition">
+                    <i class="fa-solid fa-snowflake"></i>
+                    <span>冷却 (60℃→20℃)</span>
+                </button>
+                <button id="btn-pause" onclick="stopTempAnim()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 transition">
+                    <i class="fa-solid fa-pause"></i>
+                </button>
+                <button id="btn-heat" onclick="startTempAnim(1)" class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition">
+                    <i class="fa-solid fa-fire"></i>
+                    <span>加熱 (20℃→60℃)</span>
+                </button>
+            </div>
+
+            <!-- クイック温度ジャンプ -->
+            <div class="flex items-center gap-1 shrink-0">
+                <button onclick="setTemperature(60)" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 text-[11px] font-bold border border-rose-500/30">
+                    60℃ (冷却前)
+                </button>
+                <button onclick="setTemperature(40)" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-semibold border border-slate-700">
+                    40℃ (途中)
+                </button>
+                <button onclick="setTemperature(20)" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 text-[11px] font-bold border border-sky-500/40">
+                    20℃ (冷却後・解答状態)
+                </button>
+            </div>
+
+            <!-- 温度連続スライダー -->
+            <div class="flex-1 w-full flex items-center gap-3 bg-slate-950/90 px-3.5 py-1.5 rounded-xl border border-slate-800">
+                <span class="text-[11px] font-bold text-sky-400 shrink-0">
+                    <i class="fa-solid fa-temperature-low mr-1"></i>低温 20℃
+                </span>
+                <input 
+                    type="range" 
+                    id="temp-slider" 
+                    min="200" 
+                    max="600" 
+                    value="200" 
+                    oninput="onTempSliderInput(this.value)"
+                    class="w-full accent-sky-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                >
+                <span class="text-[11px] font-bold text-rose-400 shrink-0">
+                    高温 60℃<i class="fa-solid fa-temperature-high ml-1"></i>
+                </span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- =====================================================================
+         右側引き出し式（ドロワー）詳細解説パネル
+    ====================================================================== -->
+    <aside id="side-drawer" class="fixed top-14 bottom-3 right-3 w-80 sm:w-[460px] z-30 glass-panel rounded-3xl shadow-2xl flex flex-col transition-transform duration-300 ease-in-out translate-x-[110%]">
+        <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/70 rounded-t-3xl">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-lightbulb text-amber-400"></i>
+                <h2 class="font-bold text-sm text-white">なぜ立式が違うのか？（溶媒の質量変化と比例）</h2>
+            </div>
+            <button onclick="toggleDrawer()" class="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition">
+                <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+        </div>
+
+        <div class="p-5 flex-1 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-200">
+            
+            <!-- ポイント1：無水物 vs 水和物の決定的な違い -->
+            <div class="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl space-y-2.5">
+                <h3 class="font-bold text-amber-400 text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-droplet"></i> 1. 最大のポイント：「溶媒（水）の質量」が変化するか？
+                </h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                    <div class="bg-amber-950/30 border border-amber-500/30 p-3 rounded-xl">
+                        <div class="font-bold text-amber-300 mb-1">● 例題1：硝酸カリウム KNO₃</div>
+                        <p class="text-[11px] text-slate-300">
+                            析出する結晶に<strong>水が含まれない（無水物）</strong>ため、冷却して結晶が底に溜まっても、<strong>上澄み液の中にある「水（溶媒）の質量」は冷却前と全く変わりません</strong>（ずっと $47.6\text{ g}$ のまま）。
+                        </p>
+                    </div>
+                    <div class="bg-sky-950/40 border border-sky-500/40 p-3 rounded-xl">
+                        <div class="font-bold text-sky-300 mb-1">● 例題2：CuSO₄・5H₂O</div>
+                        <p class="text-[11px] text-slate-300">
+                            析出する結晶 $y\text{ [g]}$ の中に、<strong>結晶水として $\frac{90}{250}y\text{ [g]}$ の水が含まれ、溶媒の水から奪われます！</strong><br>
+                            そのため、上澄み液の水は $100\text{ g}$ から <strong>$100 - \frac{90}{250}y\text{ [g]}$ に減少</strong>します。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ポイント2：どこで比例関係が成り立っているか -->
+            <div class="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl space-y-2.5">
+                <h3 class="font-bold text-emerald-400 text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-equals"></i> 2. 立式の鉄則：「結晶を除いた上澄み液」＝「その温度の飽和溶液」！
+                </h3>
+                <p class="text-[11px] text-slate-300 leading-relaxed">
+                    どんな再結晶の問題でも、<strong>「底に析出した結晶を除いた上澄み液」は、必ず冷却後の温度（20℃）における飽和水溶液</strong>になっています。<br>
+                    したがって、<strong>【20℃の基準の飽和溶液（水100g基準）】</strong>と<strong>【実際の20℃の上澄み液】</strong>の間で、常に次の比例関係が成り立ちます。
+                </p>
+                <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-[11px] space-y-2">
+                    <div class="text-sky-300">
+                        ① 教科書の式（溶質 / 溶液 で比較）：<br>
+                        <span class="text-white font-bold">（上澄み液の溶質）÷（上澄み液全体の質量）＝ 溶解度 S ÷ (100 + S)</span>
+                    </div>
+                    <div class="text-emerald-300 border-t border-slate-800 pt-2">
+                        ② 別解の式（溶質 / 溶媒の水 で比較）：<br>
+                        <span class="text-white font-bold">（上澄み液の溶質）÷（上澄み液の水の質量）＝ 溶解度 S ÷ 100</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 例題2の式量内訳の解説 -->
+            <div class="bg-sky-950/30 border border-sky-500/30 p-4 rounded-2xl space-y-2">
+                <h3 class="font-bold text-sky-300 text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-chart-pie"></i> 3. 例題2：CuSO₄・5H₂O（式量250）の内訳の求め方
+                </h3>
+                <p class="text-[11px] text-slate-200 leading-relaxed">
+                    硫酸銅(II)五水和物 $\text{CuSO}_4\cdot 5\text{H}_2\text{O}$（式量 $250$）は、無水物 $\text{CuSO}_4$（式量 $160$）と結晶水 $5\text{H}_2\text{O}$（式量 $18\times 5 = 90$）が $160 : 90$ の質量比で結合しています。<br>
+                    よって、水和物結晶が $y\text{ [g]}$ 析出したとき：<br>
+                    ・結晶中の $\text{CuSO}_4$（溶質）：<strong class="text-sky-300">$y \times \frac{160}{250}\text{ [g]}$</strong><br>
+                    ・結晶中の $5\text{H}_2\text{O}$（水）：<strong class="text-indigo-300">$y \times \frac{90}{250}\text{ [g]}$</strong><br>
+                    となります。上澄み液全体の質量は、最初の溶液 $140\text{ g}$ から析出した結晶 $y\text{ g}$ を丸ごと引いた <strong>$(140 - y)\text{ [g]}$</strong> になるため、分母を溶液全体にとる教科書の式 $\frac{40 - \frac{160}{250}y}{140 - y} = \frac{20}{120}$ は計算がとてもシンプルになります！
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    <!-- =====================================================================
+         メインスクリプト：溶解度・水和物計算・ビーカー＆比例バー描画
+    ====================================================================== -->
+    <script>
+        /**
+         * 状態管理
+         * currentMode: 'ex1' (例題1 KNO3) | 'ex2' (例題2 CuSO4・5H2O) | 'compare' (徹底比較) | 'practice' (問4・5・6)
+         * currentTemp: 20.0 〜 60.0 (問4では 10.0 〜 70.0)
+         * eqType: 'solution' (溶質/溶液: 教科書本解) | 'water' (溶質/水: 別解)
+         * highlightPart: null | 'precip' | 'super_solute' | 'super_water' | 'super_total' | 'initial_total'
+         */
+        let currentMode = 'ex1';
+        let practiceId = 'q4'; // 'q4' | 'q5' | 'q6'
+        let currentTemp = 20.0;
+        let tempAnimDir = 0;   // -1: 冷却中, +1: 加熱中, 0: 停止
+        let eqType = 'solution';
+        let highlightPart = null;
+
+        const beakerCanvas = document.getElementById('beaker-canvas');
+        const bCtx = beakerCanvas.getContext('2d');
+        const curveCanvas = document.getElementById('curve-canvas');
+        const cCtx = curveCanvas.getContext('2d');
+
+        // 結晶粒子アニメーション用シード
+        const ionParticles = [];
+        for (let i = 0; i < 28; i++) {
+            ionParticles.push({
+                rx: 0.1 + Math.random() * 0.8,
+                ry: 0.1 + Math.random() * 0.8,
+                vx: (Math.random() - 0.5) * 0.008,
+                vy: (Math.random() - 0.5) * 0.008,
+                type: i % 2 === 0 ? 'solute' : 'water'
+            });
+        }
+
+        // 温度 T [℃] における溶解度関数（教科書の値に完全一致する滑らかな曲線）
+        // KNO3: 20℃で32, 40℃で64, 60℃で110 -> S(T) = 12 + 0.6*T + 0.0175*T^2
+        function getSolubilityKNO3(T) {
+            return 12 + 0.6 * T + 0.0175 * T * T;
+        }
+
+        // CuSO4 (無水物としての溶解度): 20℃で20, 60℃で40 -> S(T) = 14 + 0.2*T + 0.0038889*T^2
+        function getSolubilityCuSO4(T) {
+            return 14 + 0.2 * T + (0.035 / 9.0) * T * T;
+        }
+
+        // ホウ酸 H3BO3 (問4): 10℃で5.0, 70℃で20 -> S(T) = 3.5 + 0.12*T + 0.001653*T^2
+        function getSolubilityH3BO3(T) {
+            return 3.5 + 0.12 * T + 0.00165289 * T * T;
+        }
+
+        // NaCl (問5): 20℃で36, 80℃で38
+        function getSolubilityNaCl(T) {
+            return 35.33 + 0.03333 * T;
+        }
+
+        /**
+         * 現在のモード・温度における全質量バランスを計算
+         */
+        function getSimulationState() {
+            if (currentMode === 'ex1') {
+                // 例題1：60℃のKNO3飽和水溶液 100g を T℃ (60℃→20℃) に冷却
+                // 60℃での溶解度 S60 = 110 -> 基準飽和溶液 = 水100g + KNO3 110g = 210g
+                // 初期 100g 中の内訳: 水 W0 = 100 * (100/210) = 47.619g, 溶質 M0 = 100 * (110/210) = 52.381g
+                const S60 = 110.0;
+                const ST = getSolubilityKNO3(currentTemp);
+                const totalMass = 100.0;
+                const W0 = totalMass * (100.0 / (100.0 + S60)); // 47.619 g
+                const M0 = totalMass * (S60 / (100.0 + S60));   // 52.381 g
+
+                // T℃の上澄み液（水 W0 は不変！）に溶けられる最大KNO3質量
+                const maxSoluteAtT = W0 * (ST / 100.0);
+                const dissolvedSolute = Math.min(M0, maxSoluteAtT);
+                const precipMass = Math.max(0.0, M0 - dissolvedSolute); // 20℃で 37.14g
+                const superWater = W0; // 水は変化しない！
+                const superTotal = totalMass - precipMass;
+
+                return {
+                    mode: 'ex1',
+                    name: '硝酸カリウム KNO₃',
+                    isHydrate: false,
+                    T: currentTemp,
+                    S_high: 110, S_low: 32, S_now: ST,
+                    stdHighWater: 100, stdHighSolute: 110, stdHighTotal: 210,
+                    stdNowWater: 100, stdNowSolute: ST, stdNowTotal: 100 + ST,
+                    initialTotal: totalMass,
+                    initialWater: W0,
+                    initialSolute: M0,
+                    superWater: superWater,
+                    superSolute: dissolvedSolute,
+                    superTotal: superTotal,
+                    precipTotal: precipMass,
+                    precipAnhydrous: precipMass,
+                    precipWater: 0.0
+                };
+
+            } else if (currentMode === 'ex2') {
+                // 例題2：60℃のCuSO4飽和水溶液 140g（水100g + CuSO4 40g）を T℃ (60℃→20℃) に冷却
+                // 析出する CuSO4・5H2O を y [g] とすると:
+                // (40 - 0.64 y) / (100 - 0.36 y) = ST / 100
+                // 4000 - 64 y = ST * (100 - 0.36 y)  =>  y = (4000 - 100*ST) / (64 - 0.36*ST)
+                const ST = getSolubilityCuSO4(currentTemp);
+                const totalMass = 140.0;
+                const W0 = 100.0;
+                const M0 = 40.0;
+
+                const rawY = (4000.0 - 100.0 * ST) / (64.0 - 0.36 * ST);
+                const y = Math.max(0.0, rawY); // 20℃(ST=20)で y = 2000 / 56.8 = 35.211 g
+                const precipAnhydrous = y * (160.0 / 250.0); // 0.64 y (20℃で 22.54 g)
+                const precipWater = y * (90.0 / 250.0);      // 0.36 y (20℃で 12.68 g)
+
+                const superSolute = M0 - precipAnhydrous;    // 20℃で 17.46 g
+                const superWater = W0 - precipWater;         // 20℃で 87.32 g（水が減る！）
+                const superTotal = totalMass - y;            // 20℃で 104.79 g
+
+                return {
+                    mode: 'ex2',
+                    name: '硫酸銅(II)五水和物 CuSO₄・5H₂O',
+                    isHydrate: true,
+                    T: currentTemp,
+                    S_high: 40, S_low: 20, S_now: ST,
+                    stdHighWater: 100, stdHighSolute: 40, stdHighTotal: 140,
+                    stdNowWater: 100, stdNowSolute: ST, stdNowTotal: 100 + ST,
+                    initialTotal: totalMass,
+                    initialWater: W0,
+                    initialSolute: M0,
+                    superWater: superWater,
+                    superSolute: superSolute,
+                    superTotal: superTotal,
+                    precipTotal: y,
+                    precipAnhydrous: precipAnhydrous,
+                    precipWater: precipWater
+                };
+
+            } else if (currentMode === 'compare') {
+                // 比較モード：同じ「水100g基準の60℃飽和溶液」をT℃に冷却したときの KNO3 vs CuSO4・5H2O を両方返す
+                const ST_k = getSolubilityKNO3(currentTemp);
+                const ST_c = getSolubilityCuSO4(currentTemp);
+
+                const precipK = Math.max(0, 110.0 - ST_k);
+                const yC = Math.max(0, (4000.0 - 100.0 * ST_c) / (64.0 - 0.36 * ST_c));
+
+                return {
+                    mode: 'compare',
+                    T: currentTemp,
+                    kno3: {
+                        W0: 100, M0: 110, total0: 210,
+                        superWater: 100, superSolute: 110 - precipK,
+                        precipTotal: precipK, precipAnhydrous: precipK, precipWater: 0,
+                        S_now: ST_k
+                    },
+                    cuso4: {
+                        W0: 100, M0: 40, total0: 140,
+                        superWater: 100 - yC * 0.36, superSolute: 40 - yC * 0.64,
+                        precipTotal: yC, precipAnhydrous: yC * 0.64, precipWater: yC * 0.36,
+                        S_now: ST_c
+                    }
+                };
+
+            } else {
+                // 練習問題モード (問4, 問5, 問6)
+                if (practiceId === 'q4') {
+                    // 問4：ホウ酸 70℃(S=20) の飽和溶液 200g を 10℃(S=5.0) に冷却
+                    // スライダー 20〜60 を 10℃〜70℃ にマッピング
+                    const mappedT = 10.0 + ((currentTemp - 20.0) / 40.0) * 60.0;
+                    const ST = getSolubilityH3BO3(mappedT);
+                    const totalMass = 200.0;
+                    const W0 = 200.0 * (100.0 / 120.0); // 166.67 g
+                    const M0 = 200.0 * (20.0 / 120.0);  // 33.33 g
+                    const dissolved = Math.min(M0, W0 * (ST / 100.0));
+                    const precip = Math.max(0, M0 - dissolved); // 10℃で 25.0 g
+
+                    return {
+                        mode: 'practice', practiceId: 'q4',
+                        name: '問4：ホウ酸 H₃BO₃', isHydrate: false,
+                        T: mappedT, S_high: 20, S_low: 5.0, S_now: ST,
+                        stdHighWater: 100, stdHighSolute: 20, stdHighTotal: 120,
+                        stdNowWater: 100, stdNowSolute: ST, stdNowTotal: 100 + ST,
+                        initialTotal: totalMass, initialWater: W0, initialSolute: M0,
+                        superWater: W0, superSolute: dissolved, superTotal: totalMass - precip,
+                        precipTotal: precip, precipAnhydrous: precip, precipWater: 0
+                    };
+                } else if (practiceId === 'q5') {
+                    // 問5：NaCl 80℃(S=38) の飽和溶液 100g から同温度で水を最大 20g 蒸発させる
+                    // スライダー 60→20 を「蒸発させた水の量 0g → 20g」にマッピング
+                    const evapWater = ((60.0 - currentTemp) / 40.0) * 20.0;
+                    const S80 = 38.0;
+                    const W0 = 100.0 * (100.0 / 138.0); // 72.46 g
+                    const M0 = 100.0 * (38.0 / 138.0);  // 27.54 g
+                    const superWater = W0 - evapWater;
+                    const dissolved = superWater * (S80 / 100.0);
+                    const precip = Math.max(0, M0 - dissolved); // 20g蒸発時: 20 * (38/100) = 7.6 g
+
+                    return {
+                        mode: 'practice', practiceId: 'q5',
+                        name: '問5：塩化ナトリウム NaCl (水蒸発)', isHydrate: false,
+                        T: 80.0, evapWater: evapWater, S_high: 38, S_low: 38, S_now: 38,
+                        stdHighWater: 100, stdHighSolute: 38, stdHighTotal: 138,
+                        stdNowWater: 100, stdNowSolute: 38, stdNowTotal: 138,
+                        initialTotal: 100.0, initialWater: W0, initialSolute: M0,
+                        superWater: superWater, superSolute: dissolved, superTotal: superWater + dissolved,
+                        precipTotal: precip, precipAnhydrous: precip, precipWater: 0
+                    };
+                } else {
+                    // 問6：CuSO4・5H2O 結晶 50g（中にCuSO4 32g + 結晶水 18g）を水に溶かして60℃(S=40)の飽和溶液をつくる
+                    // 必要な追加の水 w = 62g (合計の水 80g で CuSO4 32g がちょうど飽和: 32/80 = 40/100)
+                    const addedWater = 62.0;
+                    const crystalMass = 50.0;
+                    const cuso4InCrystal = 50.0 * (160.0 / 250.0); // 32.0 g
+                    const waterInCrystal = 50.0 * (90.0 / 250.0);  // 18.0 g
+                    const totalWater = addedWater + waterInCrystal; // 80.0 g
+
+                    return {
+                        mode: 'practice', practiceId: 'q6',
+                        name: '問6：CuSO₄・5H₂O 50gの溶解', isHydrate: true,
+                        T: 60.0, S_high: 40, S_low: 40, S_now: 40,
+                        stdNowWater: 100, stdNowSolute: 40, stdNowTotal: 140,
+                        crystalMass, cuso4InCrystal, waterInCrystal, addedWater,
+                        initialTotal: crystalMass + addedWater, initialWater: totalWater, initialSolute: cuso4InCrystal,
+                        superWater: totalWater, superSolute: cuso4InCrystal, superTotal: totalWater + cuso4InCrystal,
+                        precipTotal: 0, precipAnhydrous: 0, precipWater: 0
+                    };
+                }
+            }
+        }
+
+        // =====================================================================
+        // 左側メインキャンバス描画（ビーカー断面 ＋ 溶媒変化 ＋ 比例関係ブロック図）
+        // =====================================================================
+        function drawBeakerAndRatioCanvas(state) {
+            const w = beakerCanvas.width;
+            const h = beakerCanvas.height;
+            const ctx = bCtx;
+            ctx.clearRect(0, 0, w, h);
+
+            if (state.mode === 'compare') {
+                drawComparisonView(ctx, w, h, state);
+                return;
+            }
+
+            // 左半分に「実際のビーカーと析出結晶の内訳」、右半分に「どこで比例が成り立つか（基準飽和溶液 vs 実際の上澄み液）の棒グラフ比較」
+            const beakerCenterX = w * 0.25;
+            const beakerW = Math.min(w * 0.36, 210);
+            const beakerH = Math.min(h * 0.68, 250);
+            const beakerTopY = (h - beakerH) / 2 + 12;
+
+            drawAnimatedBeaker(ctx, beakerCenterX - beakerW / 2, beakerTopY, beakerW, beakerH, state);
+            drawProportionBarsPanel(ctx, w * 0.47, 18, w * 0.50, h - 32, state);
+        }
+
+        // ビーカーと析出結晶（無水物 vs 水和物の内訳）の描画
+        function drawAnimatedBeaker(ctx, x, y, w, h, state) {
+            ctx.save();
+
+            // ビーカー上部タイトル
+            ctx.font = 'bold 12.5px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = state.isHydrate ? '#38bdf8' : '#fbbf24';
+            ctx.textAlign = 'center';
+            ctx.fillText(`実際のビーカー（全体 ${state.initialTotal.toFixed(0)} g）`, x + w / 2, y - 22);
+
+            ctx.font = '11px "Inter", "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillText(`上澄み液: ${state.superTotal.toFixed(1)} g / 析出結晶: ${state.precipTotal.toFixed(1)} g`, x + w / 2, y - 6);
+
+            const bottomY = y + h;
+            // 析出結晶の堆積高さ
+            const maxPrecipH = h * 0.28;
+            const precipRatio = Math.min(1.0, state.precipTotal / 55.0);
+            const precipH = precipRatio * maxPrecipH;
+
+            // 水面高さ（水和物析出時は溶媒の水が減るため水面も少し下がる演出）
+            const waterShrinkOffset = state.isHydrate ? (state.precipWater / 100.0) * (h * 0.22) : 0;
+            const liquidTopY = y + 26 + waterShrinkOffset;
+            const liquidH = bottomY - liquidTopY;
+
+            // もし元の水面（60℃時点）より下がっている場合、減少した水の位置に点線ガイドを表示
+            if (state.isHydrate && state.precipWater > 0.3) {
+                ctx.save();
+                ctx.strokeStyle = '#f43f5e';
+                ctx.setLineDash([4, 3]);
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(x + 4, y + 26);
+                ctx.lineTo(x + w - 4, y + 26);
+                ctx.stroke();
+
+                ctx.font = 'bold 10px "Noto Sans JP", sans-serif';
+                ctx.fillStyle = '#fb7185';
+                ctx.textAlign = 'right';
+                ctx.fillText(`↓ 結晶水として水 ${state.precipWater.toFixed(1)}g が結晶へ移動!`, x + w - 6, y + 21);
+                ctx.restore();
+            }
+
+            // 上澄み液（飽和水溶液）の背景塗りとハイライト判定
+            const isSuperHighlighted = (highlightPart === 'super_total' || highlightPart === 'super_water' || highlightPart === 'super_solute');
+            const liqGrad = ctx.createLinearGradient(x, liquidTopY, x, bottomY);
+            if (state.isHydrate) {
+                // 硫酸銅水溶液の鮮やかな青色
+                liqGrad.addColorStop(0, 'rgba(14, 165, 233, 0.38)');
+                liqGrad.addColorStop(1, 'rgba(2, 132, 199, 0.62)');
+            } else {
+                // 硝酸カリウム水溶液の透明感のある淡いブルー・アンバー
+                liqGrad.addColorStop(0, 'rgba(56, 189, 248, 0.18)');
+                liqGrad.addColorStop(1, 'rgba(245, 158, 11, 0.25)');
+            }
+            ctx.fillStyle = liqGrad;
+            ctx.fillRect(x + 3, liquidTopY, w - 6, liquidH);
+
+            if (isSuperHighlighted) {
+                ctx.strokeStyle = '#facc15';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x + 4, liquidTopY + 1, w - 8, liquidH - precipH - 2);
+            }
+
+            // 容器内クリッピング
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x + 3, liquidTopY, w - 6, liquidH - 2);
+            ctx.clip();
+
+            // 溶けている溶質イオン・水分子のアニメーション
+            const activeGasH = Math.max(16, liquidH - precipH);
+            ionParticles.forEach((pt, idx) => {
+                pt.rx += pt.vx;
+                pt.ry += pt.vy;
+                if (pt.rx < 0.08 || pt.rx > 0.92) pt.vx *= -1;
+                if (pt.ry < 0.08 || pt.ry > 0.88) pt.vy *= -1;
+
+                const px = x + 6 + pt.rx * (w - 12);
+                const py = liquidTopY + 6 + pt.ry * (activeGasH - 12);
+
+                ctx.beginPath();
+                if (pt.type === 'solute') {
+                    ctx.fillStyle = state.isHydrate ? '#38bdf8' : '#fbbf24';
+                    ctx.arc(px, py, 3.8, 0, Math.PI * 2);
+                } else {
+                    ctx.fillStyle = 'rgba(186, 230, 253, 0.55)';
+                    ctx.arc(px, py, 2.8, 0, Math.PI * 2);
+                }
+                ctx.fill();
+            });
+
+            // 底に析出した結晶の描画（例題2の図と同じく「CuSO4 : 5H2O = 160 : 90」のドーム内訳を視覚化！）
+            if (precipH > 1.5) {
+                const pTopY = bottomY - precipH;
+
+                if (state.isHydrate) {
+                    // 硫酸銅(II)五水和物：左側 64% (160/250) が CuSO4、右側 36% (90/250) が 5H2O(結晶水)
+                    const splitX = x + 3 + (w - 6) * (160.0 / 250.0);
+
+                    // 左側：無水物 CuSO4 部分
+                    ctx.fillStyle = 'rgba(2, 132, 199, 0.95)';
+                    ctx.fillRect(x + 3, pTopY, splitX - (x + 3), precipH);
+
+                    // 右側：結晶水 5H2O 部分
+                    ctx.fillStyle = 'rgba(99, 102, 241, 0.92)';
+                    ctx.fillRect(splitX, pTopY, (x + w - 3) - splitX, precipH);
+
+                    // 境界点線
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(splitX, pTopY);
+                    ctx.lineTo(splitX, bottomY);
+                    ctx.stroke();
+
+                    // ラベル表示
+                    ctx.font = 'bold 10.5px "Noto Sans JP", sans-serif';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textAlign = 'center';
+                    if (precipH > 22) {
+                        ctx.fillText(`CuSO₄ (${state.precipAnhydrous.toFixed(1)}g)`, (x + splitX) / 2, bottomY - precipH / 2 + 4);
+                        ctx.fillText(`5H₂O (${state.precipWater.toFixed(1)}g)`, (splitX + x + w) / 2, bottomY - precipH / 2 + 4);
+                    }
+                } else {
+                    // 硝酸カリウム KNO3（白い針状結晶イメージ）
+                    const kGrad = ctx.createLinearGradient(x, pTopY, x, bottomY);
+                    kGrad.addColorStop(0, '#fef3c7');
+                    kGrad.addColorStop(1, '#f59e0b');
+                    ctx.fillStyle = kGrad;
+                    ctx.fillRect(x + 3, pTopY, w - 6, precipH);
+
+                    if (precipH > 18) {
+                        ctx.font = 'bold 11px "Noto Sans JP", sans-serif';
+                        ctx.fillStyle = '#0f172a';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(`析出 KNO₃: ${state.precipTotal.toFixed(1)} g (水は0g!)`, x + w / 2, bottomY - precipH / 2 + 4);
+                    }
+                }
+
+                // 結晶上面のキラッと光る境界線
+                ctx.strokeStyle = highlightPart === 'precip' ? '#facc15' : '#e0f2fe';
+                ctx.lineWidth = highlightPart === 'precip' ? 3.5 : 1.8;
+                ctx.beginPath();
+                ctx.moveTo(x + 3, pTopY);
+                ctx.lineTo(x + w - 3, pTopY);
+                ctx.stroke();
+            }
+
+            ctx.restore(); // クリップ解除
+
+            // 上澄み液の内訳ラベル（ビーカー中央）
+            const midSuperY = liquidTopY + (bottomY - precipH - liquidTopY) * 0.48;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+            ctx.strokeStyle = isSuperHighlighted ? '#facc15' : 'rgba(148, 163, 184, 0.4)';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.roundRect(x + 12, midSuperY - 24, w - 24, 48, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.font = 'bold 11px "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillText(`【上澄み液 = ${Math.round(state.T)}℃の飽和溶液】`, x + w / 2, midSuperY - 8);
+            ctx.font = 'bold 11px "Inter", "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText(`水: ${state.superWater.toFixed(1)}g`, x + w * 0.30, midSuperY + 12);
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillText(`溶質: ${state.superSolute.toFixed(1)}g`, x + w * 0.72, midSuperY + 12);
+
+            // ビーカーガラス外壁
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 3.5;
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x, bottomY);
+            ctx.lineTo(x + w, bottomY);
+            ctx.lineTo(x + w, y);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // 右半分：「どこで比例関係が成り立っているか」を視覚化する2本の積み上げ棒グラフ
+        function drawProportionBarsPanel(ctx, x, y, w, h, state) {
+            ctx.save();
+
+            // パネル背景
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, 16);
+            ctx.fill();
+            ctx.stroke();
+
+            // タイトル
+            ctx.font = 'bold 12px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#f8fafc';
+            ctx.textAlign = 'center';
+            ctx.fillText(`なぜ立式できる？「${Math.round(state.T)}℃の基準飽和溶液」と「実際の上澄み液」の比例`, x + w / 2, y + 22);
+
+            const barTop = y + 52;
+            const barBottom = y + h - 42;
+            const maxBarH = barBottom - barTop;
+
+            const barW = Math.min(68, w * 0.26);
+            const leftBarX = x + w * 0.25 - barW / 2;
+            const rightBarX = x + w * 0.75 - barW / 2;
+
+            // 1. 左バー：T℃における「基準の飽和溶液（水100g + 溶質S_now g）」
+            const stdTotal = state.stdNowTotal;
+            const stdH = maxBarH * 0.86;
+            const stdSoluteH = stdH * (state.stdNowSolute / stdTotal);
+            const stdWaterH = stdH - stdSoluteH;
+
+            const stdStartY = barBottom - stdH;
+
+            // 基準バー：上段＝溶質 S_now
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.85)';
+            ctx.fillRect(leftBarX, stdStartY, barW, stdSoluteH);
+            // 基準バー：下段＝水 100g
+            ctx.fillStyle = 'rgba(14, 165, 233, 0.80)';
+            ctx.fillRect(leftBarX, stdStartY + stdSoluteH, barW, stdWaterH);
+
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(leftBarX, stdStartY, barW, stdH);
+
+            // 基準バーのテキスト
+            ctx.font = 'bold 10.5px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#0f172a';
+            ctx.textAlign = 'center';
+            if (stdSoluteH > 16) {
+                ctx.fillText(`溶質 ${state.stdNowSolute.toFixed(0)}g`, leftBarX + barW / 2, stdStartY + stdSoluteH / 2 + 4);
+            }
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(`水 100g`, leftBarX + barW / 2, stdStartY + stdSoluteH + stdWaterH / 2 + 4);
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = 'bold 11px "Noto Sans JP", sans-serif';
+            ctx.fillText(`【基準 (${Math.round(state.T)}℃飽和)】`, leftBarX + barW / 2, barBottom + 16);
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '10px "Inter", "Noto Sans JP", sans-serif';
+            ctx.fillText(`溶液合計: ${(100 + state.stdNowSolute).toFixed(0)} g`, leftBarX + barW / 2, barBottom + 31);
+
+            // 2. 右バー：「実際のビーカー（上澄み液 ＋ 析出結晶）」
+            // 上澄み液の比率（溶質 : 水）が左の基準バーと完全に同じプロポーションであることを視覚化！
+            const actSuperH = stdH * 0.78;
+            const actSoluteH = actSuperH * (state.superSolute / Math.max(1, state.superTotal));
+            const actWaterH = actSuperH - actSoluteH;
+            const actPrecipH = Math.min(maxBarH - actSuperH, (state.precipTotal / state.initialTotal) * stdH);
+
+            const actSuperStartY = barBottom - actPrecipH - actSuperH;
+
+            // 実際の上澄み液：上段＝残存溶質
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.85)';
+            ctx.fillRect(rightBarX, actSuperStartY, barW, actSoluteH);
+            if (highlightPart === 'super_solute') {
+                ctx.strokeStyle = '#facc15'; ctx.lineWidth = 3.5;
+                ctx.strokeRect(rightBarX - 1, actSuperStartY - 1, barW + 2, actSoluteH + 2);
+            }
+
+            // 実際の上澄み液：下段＝残存水（例題2では 100 - 0.36y に減っている！）
+            ctx.fillStyle = 'rgba(14, 165, 233, 0.80)';
+            ctx.fillRect(rightBarX, actSuperStartY + actSoluteH, barW, actWaterH);
+            if (highlightPart === 'super_water') {
+                ctx.strokeStyle = '#facc15'; ctx.lineWidth = 3.5;
+                ctx.strokeRect(rightBarX - 1, actSuperStartY + actSoluteH - 1, barW + 2, actWaterH + 2);
+            }
+
+            if (highlightPart === 'super_total') {
+                ctx.strokeStyle = '#facc15'; ctx.lineWidth = 3.5;
+                ctx.strokeRect(rightBarX - 2, actSuperStartY - 2, barW + 4, actSuperH + 4);
+            }
+
+            // 析出した結晶ブロック（一番下）
+            if (actPrecipH > 2) {
+                ctx.fillStyle = state.isHydrate ? 'rgba(99, 102, 241, 0.90)' : 'rgba(234, 179, 8, 0.90)';
+                ctx.fillRect(rightBarX, barBottom - actPrecipH, barW, actPrecipH);
+                if (highlightPart === 'precip') {
+                    ctx.strokeStyle = '#facc15'; ctx.lineWidth = 3.5;
+                    ctx.strokeRect(rightBarX - 2, barBottom - actPrecipH - 2, barW + 4, actPrecipH + 4);
+                }
+                ctx.font = 'bold 9.5px "Noto Sans JP", sans-serif';
+                ctx.fillStyle = '#ffffff';
+                if (actPrecipH > 13) {
+                    ctx.fillText(`析出 ${state.precipTotal.toFixed(1)}g`, rightBarX + barW / 2, barBottom - actPrecipH / 2 + 3);
+                }
+            }
+
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(rightBarX, actSuperStartY, barW, actSuperH + actPrecipH);
+
+            // 実際のバー内の数値ラベル
+            ctx.font = 'bold 10px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#0f172a';
+            if (actSoluteH > 14) {
+                ctx.fillText(`溶質 ${state.superSolute.toFixed(1)}g`, rightBarX + barW / 2, actSuperStartY + actSoluteH / 2 + 4);
+            }
+            ctx.fillStyle = '#ffffff';
+            if (actWaterH > 16) {
+                ctx.fillText(`水 ${state.superWater.toFixed(1)}g`, rightBarX + barW / 2, actSuperStartY + actSoluteH + actWaterH / 2 + 4);
+            }
+
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = 'bold 11px "Noto Sans JP", sans-serif';
+            ctx.fillText(`【実際のビーカー】`, rightBarX + barW / 2, barBottom + 16);
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '10px "Inter", "Noto Sans JP", sans-serif';
+            ctx.fillText(`上澄み液: ${state.superTotal.toFixed(1)} g`, rightBarX + barW / 2, barBottom + 31);
+
+            // 3. 左右のバーを結ぶ「比例関係（＝同じ濃度・同じ比率！）」の矢印とイコール記号
+            const midX = (leftBarX + barW + rightBarX) / 2;
+            const soluteMidYLeft = stdStartY + stdSoluteH / 2;
+            const soluteMidYRight = actSuperStartY + actSoluteH / 2;
+
+            ctx.save();
+            ctx.strokeStyle = '#38bdf8';
+            ctx.setLineDash([4, 3]);
+            ctx.lineWidth = 1.8;
+            // 溶質同士を結ぶ破線
+            ctx.beginPath();
+            ctx.moveTo(leftBarX + barW + 4, soluteMidYLeft);
+            ctx.lineTo(rightBarX - 4, soluteMidYRight);
+            ctx.stroke();
+
+            // 水（または上澄み溶液）同士を結ぶ破線
+            const denomYLeft = eqType === 'solution' ? (stdStartY + stdH / 2) : (stdStartY + stdSoluteH + stdWaterH / 2);
+            const denomYRight = eqType === 'solution' ? (actSuperStartY + actSuperH / 2) : (actSuperStartY + actSoluteH + actWaterH / 2);
+            ctx.strokeStyle = '#34d399';
+            ctx.beginPath();
+            ctx.moveTo(leftBarX + barW + 4, denomYLeft);
+            ctx.lineTo(rightBarX - 4, denomYRight);
+            ctx.stroke();
+            ctx.restore();
+
+            // 中央の「比例 相等」バッジ
+            const badgeY = (soluteMidYLeft + denomYRight) / 2;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.roundRect(midX - 36, badgeY - 18, 72, 36, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.font = 'bold 10.5px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#fde047';
+            ctx.textAlign = 'center';
+            ctx.fillText('比率が等しい!', midX, badgeY - 4);
+            ctx.font = 'bold 10px "Inter", sans-serif';
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText(eqType === 'solution' ? '(溶質 / 溶液)' : '(溶質 / 水)', midX, badgeY + 11);
+
+            ctx.restore();
+        }
+
+        // モード3（徹底比較）：KNO3 と CuSO4・5H2O を横に並べて「溶媒の水が変化しない vs 減少する」を比較
+        function drawComparisonView(ctx, w, h, state) {
+            ctx.save();
+            const halfW = (w - 30) / 2;
+            const cardH = h - 24;
+
+            // 左カード：硝酸カリウム KNO3（水100g + 110g = 210g → 冷却）
+            drawCompareCard(
+                ctx, 10, 12, halfW, cardH,
+                '① 無水物結晶：硝酸カリウム KNO₃',
+                '結晶に水を含まない → 溶媒(水)は 100g のまま不変！',
+                '#fbbf24', state.kno3, false
+            );
+
+            // 右カード：硫酸銅(II)五水和物 CuSO4・5H2O（水100g + 40g = 140g → 冷却）
+            drawCompareCard(
+                ctx, 20 + halfW, 12, halfW, cardH,
+                '② 水和物結晶：硫酸銅(II)五水和物 CuSO₄・5H₂O',
+                `結晶水(5H₂O)として水 ${state.cuso4.precipWater.toFixed(1)}g が奪われ、溶媒の水が減る！`,
+                '#38bdf8', state.cuso4, true
+            );
+            ctx.restore();
+        }
+
+        function drawCompareCard(ctx, x, y, w, h, title, subtitle, accentColor, data, isHydrate) {
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.strokeStyle = isHydrate ? 'rgba(56, 189, 248, 0.45)' : 'rgba(251, 191, 36, 0.45)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, 14);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.font = 'bold 12px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = accentColor;
+            ctx.textAlign = 'center';
+            ctx.fillText(title, x + w / 2, y + 22);
+
+            ctx.font = 'bold 10.5px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = isHydrate ? '#fb7185' : '#34d399';
+            ctx.fillText(subtitle, x + w / 2, y + 40);
+
+            // 60℃（冷却前）と 現在温度（冷却後）の「水」「溶質」「析出」の棒比較
+            const barBottom = y + h - 36;
+            const maxH = h - 105;
+            const barW = Math.min(62, w * 0.24);
+            const xBefore = x + w * 0.28 - barW / 2;
+            const xAfter = x + w * 0.72 - barW / 2;
+
+            // 冷却前 (60℃)
+            const hWater0 = maxH * 0.55;
+            const hSolute0 = hWater0 * (data.M0 / 100.0) * (isHydrate ? 1.1 : 0.65);
+
+            ctx.fillStyle = 'rgba(14, 165, 244, 0.8)';
+            ctx.fillRect(xBefore, barBottom - hWater0, barW, hWater0);
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.85)';
+            ctx.fillRect(xBefore, barBottom - hWater0 - hSolute0, barW, hSolute0);
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.strokeRect(xBefore, barBottom - hWater0 - hSolute0, barW, hWater0 + hSolute0);
+
+            ctx.font = 'bold 10px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText('水 100.0g', xBefore + barW / 2, barBottom - hWater0 / 2 + 4);
+            ctx.fillStyle = '#0f172a';
+            ctx.fillText(`溶質 ${data.M0}g`, xBefore + barW / 2, barBottom - hWater0 - hSolute0 / 2 + 4);
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillText('冷却前 (60℃)', xBefore + barW / 2, barBottom + 16);
+
+            // 冷却後 (現在温度)
+            const hWaterNow = hWater0 * (data.superWater / 100.0);
+            const hSoluteNow = hSolute0 * (data.superSolute / data.M0);
+            const hPrecipNow = (hWater0 + hSolute0) - (hWaterNow + hSoluteNow);
+
+            // 残存水
+            ctx.fillStyle = 'rgba(14, 165, 244, 0.8)';
+            ctx.fillRect(xAfter, barBottom - hWaterNow, barW, hWaterNow);
+            // 残存溶質
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.85)';
+            ctx.fillRect(xAfter, barBottom - hWaterNow - hSoluteNow, barW, hSoluteNow);
+            // 析出結晶（上部に切り離して表示）
+            if (hPrecipNow > 2) {
+                const pY = barBottom - hWaterNow - hSoluteNow - hPrecipNow - 8;
+                ctx.fillStyle = isHydrate ? 'rgba(99, 102, 241, 0.9)' : 'rgba(234, 179, 8, 0.9)';
+                ctx.fillRect(xAfter, pY, barW, hPrecipNow);
+                ctx.strokeStyle = '#facc15';
+                ctx.strokeRect(xAfter, pY, barW, hPrecipNow);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(`析出 ${data.precipTotal.toFixed(1)}g`, xAfter + barW / 2, pY + hPrecipNow / 2 + 4);
+            }
+
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.strokeRect(xAfter, barBottom - hWaterNow - hSoluteNow, barW, hWaterNow + hSoluteNow);
+
+            // 水の高さ比較ライン
+            ctx.save();
+            ctx.strokeStyle = isHydrate ? '#f43f5e' : '#10b981';
+            ctx.setLineDash([4, 3]);
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(xBefore + barW, barBottom - hWater0);
+            ctx.lineTo(xAfter, barBottom - hWaterNow);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(`水 ${data.superWater.toFixed(1)}g`, xAfter + barW / 2, barBottom - hWaterNow / 2 + 4);
+            if (hSoluteNow > 12) {
+                ctx.fillStyle = '#0f172a';
+                ctx.fillText(`溶質 ${data.superSolute.toFixed(1)}g`, xAfter + barW / 2, barBottom - hWaterNow - hSoluteNow / 2 + 4);
+            }
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText(`冷却後 (${Math.round(currentTemp)}℃)`, xAfter + barW / 2, barBottom + 16);
+        }
+
+        // =====================================================================
+        // 右上：インタラクティブ比例式ボードのレンダリング
+        // =====================================================================
+        function renderInteractiveEquation(state) {
+            const container = document.getElementById('interactive-equation-container');
+
+            if (state.mode === 'ex1' || (state.mode === 'practice' && state.practiceId !== 'q6')) {
+                // 例題1 (KNO3) または 問4・問5
+                const sNow = state.S_now.toFixed(0);
+                const stdTotal = (100 + state.S_now).toFixed(0);
+
+                if (eqType === 'solution') {
+                    // 教科書本解：基準210gの飽和溶液から78g析出する比率 ＝ 実際の100gから x g 析出する比率
+                    const stdPrecip = (state.S_high - state.S_now).toFixed(0);
+                    const stdHighTot = state.stdHighTotal.toFixed(0);
+                    container.innerHTML = `
+                        <div class="bg-slate-950/90 p-2.5 rounded-xl border border-slate-800 flex flex-wrap items-center justify-around gap-2 text-xs">
+                            <div class="text-center">
+                                <div class="text-[10px] text-slate-400 mb-1">【比例の考え方（教科書 例題1）】</div>
+                                <div class="inline-flex items-center gap-2 font-mono text-sm">
+                                    <div class="flex flex-col items-center">
+                                        <span onclick="setHighlight('precip')" class="formula-part text-amber-300 font-bold ${highlightPart==='precip'?'formula-active':''}">析出量 (${stdPrecip} g)</span>
+                                        <span class="w-full h-[1.5px] bg-slate-500 my-0.5"></span>
+                                        <span onclick="setHighlight('initial_total')" class="formula-part text-sky-300 font-bold ${highlightPart==='initial_total'?'formula-active':''}">60℃飽和溶液 (${stdHighTot} g)</span>
+                                    </div>
+                                    <span class="text-slate-400 font-bold">＝</span>
+                                    <div class="flex flex-col items-center">
+                                        <span onclick="setHighlight('precip')" class="formula-part bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold ${highlightPart==='precip'?'formula-active':''}">求める析出量 x [${state.precipTotal.toFixed(1)} g]</span>
+                                        <span class="w-full h-[1.5px] bg-slate-500 my-0.5"></span>
+                                        <span onclick="setHighlight('initial_total')" class="formula-part text-sky-300 font-bold ${highlightPart==='initial_total'?'formula-active':''}">実際の溶液 (${state.initialTotal.toFixed(0)} g)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // 別解：上澄み液の（溶質 / 水）＝ S / 100
+                    container.innerHTML = `
+                        <div class="bg-slate-950/90 p-2.5 rounded-xl border border-slate-800 flex flex-wrap items-center justify-around gap-2 text-xs">
+                            <div class="text-center">
+                                <div class="text-[10px] text-slate-400 mb-1">【上澄み液の飽和条件（溶質 ÷ 溶媒の水）】</div>
+                                <div class="inline-flex items-center gap-2 font-mono text-sm">
+                                    <div class="flex flex-col items-center">
+                                        <span onclick="setHighlight('super_solute')" class="formula-part text-amber-300 font-bold ${highlightPart==='super_solute'?'formula-active':''}">上澄み溶質 (${state.initialSolute.toFixed(1)} － x)</span>
+                                        <span class="w-full h-[1.5px] bg-slate-500 my-0.5"></span>
+                                        <span onclick="setHighlight('super_water')" class="formula-part text-emerald-300 font-bold ${highlightPart==='super_water'?'formula-active':''}">上澄みの水 (${state.superWater.toFixed(1)} g ※不変!)</span>
+                                    </div>
+                                    <span class="text-slate-400 font-bold">＝</span>
+                                    <div class="flex flex-col items-center">
+                                        <span class="text-amber-300 font-bold">${sNow} g</span>
+                                        <span class="w-full h-[1.5px] bg-slate-500 my-0.5"></span>
+                                        <span class="text-emerald-300 font-bold">水 100 g</span>
+                                    </div>
+                                    <span class="text-slate-400">⇒</span>
+                                    <span class="text-amber-400 font-bold">x ＝ ${state.precipTotal.toFixed(1)} g</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+            } else {
+                // 例題2 (CuSO4・5H2O) または 比較モード
+                const d = state.mode === 'compare' ? state.cuso4 : state;
+                const sNow = (state.mode === 'compare' ? state.cuso4.S_now : state.S_now).toFixed(0);
+                const stdTot = (100 + parseFloat(sNow)).toFixed(0);
+
+                if (eqType === 'solution') {
+                    // 教科書 例題2 の式：(40 - 160/250 y) / (140 - y) = 20 / 120
+                    container.innerHTML = `
+                        <div class="bg-slate-950/90 p-2.5 rounded-xl border border-slate-800 flex flex-wrap items-center justify-around gap-2 text-xs">
+                            <div class="text-center w-full">
+                                <div class="text-[10px] text-sky-300 font-semibold mb-1">
+                                    【教科書 例題2の式】結晶析出後の上澄み液において「溶質 ÷ 溶液全体」の比が等しい！
+                                </div>
+                                <div class="inline-flex flex-wrap items-center justify-center gap-2 font-mono text-xs sm:text-sm">
+                                    <div class="flex flex-col items-center">
+                                        <span onclick="setHighlight('super_solute')" class="formula-part bg-amber-500/15 border border-amber-500/40 text-amber-300 font-bold ${highlightPart==='super_solute'?'formula-active':''}">
+                                            40g － <span class="text-sky-300">(160/250)y</span> <span class="text-[10px] text-slate-300">[=${d.superSolute.toFixed(1)}g]</span>
+                                        </span>
+                                        <span class="w-full h-[1.5px] bg-slate-400 my-1"></span>
+                                        <span onclick="setHighlight('super_total')" class="formula-part bg-sky-500/15 border border-sky-500/40 text-sky-300 font-bold ${highlightPart==='super_total'?'formula-active':''}">
+                                            140g － y <span class="text-[10px] text-slate-300">[上澄み溶液=${(140 - d.precipTotal).toFixed(1)}g]</span>
+                                        </span>
+                                    </div>
+                                    <span class="text-yellow-400 font-bold text-base">＝</span>
+                                    <div class="flex flex-col items-center">
+                                        <span onclick="setHighlight('super_solute')" class="formula-part text-amber-300 font-bold">${sNow} g (溶質)</span>
+                                        <span class="w-full h-[1.5px] bg-slate-400 my-1"></span>
+                                        <span onclick="setHighlight('super_total')" class="formula-part text-sky-300 font-bold">${stdTot} g (飽和溶液)</span>
+                                    </div>
+                                    <span class="text-slate-400 font-bold">⇒</span>
+                                    <span onclick="setHighlight('precip')" class="formula-part bg-indigo-500/30 border border-indigo-400 text-white font-bold px-2 py-1">
+                                        y ＝ ${d.precipTotal.toFixed(1)} g
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // 別解：「溶質 ÷ 上澄み液の溶媒(水)」＝ 20 / 100（水が 90/250 y 減ることを明示！）
+                    container.innerHTML = `
+                        <div class="bg-slate-950/90 p-2.5 rounded-xl border border-slate-800 flex flex-wrap items-center justify-around gap-2 text-xs">
+                            <div class="text-center w-full">
+                                <div class="text-[10px] text-emerald-300 font-semibold mb-1">
+                                    【溶媒(水)の減少に着目した式】結晶水 (90/250)y が奪われるため、分母の水が 100g から減る！
+                                </div>
+                                <div class="inline-flex flex-wrap items-center justify-center gap-2 font-mono text-xs sm:text-sm">
+                                    <div class="flex flex-col items-center">
+                                        <span onclick="setHighlight('super_solute')" class="formula-part bg-amber-500/15 border border-amber-500/40 text-amber-300 font-bold ${highlightPart==='super_solute'?'formula-active':''}">
+                                            40g － (160/250)y <span class="text-[10px] text-slate-300">[=${d.superSolute.toFixed(1)}g]</span>
+                                        </span>
+                                        <span class="w-full h-[1.5px] bg-slate-400 my-1"></span>
+                                        <span onclick="setHighlight('super_water')" class="formula-part bg-rose-500/20 border border-rose-500/50 text-rose-300 font-bold ${highlightPart==='super_water'?'formula-active':''}">
+                                            100g － (90/250)y <span class="text-[10px] text-white">[残った水=${d.superWater.toFixed(1)}g]</span>
+                                        </span>
+                                    </div>
+                                    <span class="text-yellow-400 font-bold text-base">＝</span>
+                                    <div class="flex flex-col items-center">
+                                        <span class="text-amber-300 font-bold">${sNow} g (溶質)</span>
+                                        <span class="w-full h-[1.5px] bg-slate-400 my-1"></span>
+                                        <span class="text-emerald-300 font-bold">100 g (基準の水)</span>
+                                    </div>
+                                    <span class="text-slate-400 font-bold">⇒</span>
+                                    <span onclick="setHighlight('precip')" class="formula-part bg-indigo-500/30 border border-indigo-400 text-white font-bold px-2 py-1">
+                                        y ＝ ${d.precipTotal.toFixed(1)} g
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        function setHighlight(part) {
+            highlightPart = (highlightPart === part) ? null : part;
+            const expEl = document.getElementById('highlight-explanation');
+
+            if (highlightPart === 'super_solute') {
+                expEl.innerHTML = `<i class="fa-solid fa-highlighter text-amber-400"></i><span><strong>【分子：上澄み液に残っている無水物溶質】</strong> 最初の溶質から、結晶中に取り込まれた無水物分（例題2では $\\frac{160}{250}y$）を引いた残りです。</span>`;
+            } else if (highlightPart === 'super_total') {
+                expEl.innerHTML = `<i class="fa-solid fa-highlighter text-sky-400"></i><span><strong>【分母：上澄み液全体の質量 $(140 - y)$】</strong> 最初の溶液 $140\\text{ g}$ から、底に沈んだ水和物結晶 $y\\text{ g}$（CuSO₄＋結晶水）を丸ごと引いた質量です。</span>`;
+            } else if (highlightPart === 'super_water') {
+                expEl.innerHTML = `<i class="fa-solid fa-highlighter text-rose-400"></i><span><strong>【分母：上澄み液に残っている溶媒（水）】</strong> KNO₃では水は減りませんが、CuSO₄・5H₂Oでは結晶水 $\\frac{90}{250}y\\text{ g}$ が奪われるため水が減少します！</span>`;
+            } else if (highlightPart === 'precip') {
+                expEl.innerHTML = `<i class="fa-solid fa-highlighter text-indigo-400"></i><span><strong>【析出した結晶】</strong> 冷却によって溶けきれなくなり、ビーカーの底に析出した結晶の質量です。</span>`;
+            } else {
+                expEl.innerHTML = `<i class="fa-solid fa-hand-pointer text-amber-400"></i><span>上の比例式の<strong>分子・分母の枠</strong>をクリックすると、左のビーカーと棒グラフの対応箇所がハイライトされます。</span>`;
+            }
+        }
+
+        // =====================================================================
+        // 右下：溶解度曲線グラフと温度別棒グラフ（教科書 図6 スタイル）
+        // =====================================================================
+        function drawSolubilityCurveCanvas(state) {
+            const w = curveCanvas.width;
+            const h = curveCanvas.height;
+            const ctx = cCtx;
+            ctx.clearRect(0, 0, w, h);
+
+            const padL = 46, padR = 24, padT = 20, padB = 34;
+            const gw = w - padL - padR;
+            const gh = h - padT - padB;
+
+            const toX = (T) => padL + (T / 80.0) * gw;
+            const toY = (S) => padT + (1.0 - S / 130.0) * gh;
+
+            // グリッド線
+            ctx.strokeStyle = 'rgba(51, 65, 85, 0.45)';
+            ctx.lineWidth = 1;
+            [20, 40, 60].forEach(t => {
+                const gx = toX(t);
+                ctx.beginPath(); ctx.moveTo(gx, padT); ctx.lineTo(gx, padT + gh); ctx.stroke();
+            });
+            [32, 64, 110].forEach(s => {
+                const gy = toY(s);
+                ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + gw, gy); ctx.stroke();
+            });
+
+            // 座標軸
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.moveTo(padL, padT - 4);
+            ctx.lineTo(padL, padT + gh);
+            ctx.lineTo(padL + gw + 4, padT + gh);
+            ctx.stroke();
+
+            // 目盛りラベル
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '10px "Inter", "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'center';
+            [0, 20, 40, 60].forEach(t => {
+                ctx.fillText(`${t}℃`, toX(t), padT + gh + 15);
+            });
+            ctx.textAlign = 'right';
+            [20, 40, 64, 110].forEach(s => {
+                ctx.fillText(`${s}`, padL - 5, toY(s) + 3);
+            });
+
+            // 1. KNO3 溶解度曲線（オレンジ）
+            ctx.strokeStyle = currentMode === 'ex1' ? '#f59e0b' : 'rgba(245, 158, 11, 0.45)';
+            ctx.lineWidth = currentMode === 'ex1' ? 3.0 : 1.8;
+            ctx.beginPath();
+            for (let t = 0; t <= 68; t += 2) {
+                const s = getSolubilityKNO3(t);
+                if (s > 128) break;
+                if (t === 0) ctx.moveTo(toX(t), toY(s)); else ctx.lineTo(toX(t), toY(s));
+            }
+            ctx.stroke();
+
+            // 2. CuSO4 溶解度曲線（スカイブルー）
+            ctx.strokeStyle = currentMode === 'ex2' ? '#38bdf8' : 'rgba(56, 189, 248, 0.55)';
+            ctx.lineWidth = currentMode === 'ex2' ? 3.0 : 1.8;
+            ctx.beginPath();
+            for (let t = 0; t <= 75; t += 2) {
+                const s = getSolubilityCuSO4(t);
+                if (t === 0) ctx.moveTo(toX(t), toY(s)); else ctx.lineTo(toX(t), toY(s));
+            }
+            ctx.stroke();
+
+            // 曲線名ラベル
+            ctx.font = 'bold 10.5px "Inter", "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillText('KNO₃', toX(52), toY(getSolubilityKNO3(52)) - 8);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText('CuSO₄', toX(62), toY(getSolubilityCuSO4(62)) - 8);
+
+            // 現在温度における教科書の棒グラフ（溶けている量 ＋ 析出する量）を描画
+            const activeS60 = (currentMode === 'ex2') ? 40.0 : 110.0;
+            const activeSNow = (currentMode === 'ex2') ? getSolubilityCuSO4(currentTemp) : getSolubilityKNO3(currentTemp);
+
+            const barX = toX(currentTemp) - 8;
+            const yTop60 = toY(activeS60);
+            const yCurveNow = toY(activeSNow);
+            const yZero = toY(0);
+
+            // 析出分（赤ピンク色：曲線より上の部分）
+            if (yCurveNow > yTop60) {
+                ctx.fillStyle = 'rgba(244, 63, 94, 0.75)';
+                ctx.fillRect(barX, yTop60, 16, yCurveNow - yTop60);
+            }
+            // 溶けている分（黄色/水色：曲線より下の部分）
+            ctx.fillStyle = currentMode === 'ex2' ? 'rgba(56, 189, 248, 0.75)' : 'rgba(251, 191, 36, 0.75)';
+            ctx.fillRect(barX, yCurveNow, 16, yZero - yCurveNow);
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.2;
+            ctx.strokeRect(barX, yTop60, 16, yZero - yTop60);
+
+            // 現在温度のポイント丸印
+            ctx.fillStyle = '#f43f5e';
+            ctx.beginPath();
+            ctx.arc(toX(currentTemp), yCurveNow, 5.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        // =====================================================================
+        // モード切替・温度スライダー・アニメーション制御
+        // =====================================================================
+        function selectMode(mode) {
+            currentMode = mode;
+            stopTempAnim();
+            highlightPart = null;
+
+            const tabs = {
+                'ex1': document.getElementById('tab-ex1'),
+                'ex2': document.getElementById('tab-ex2'),
+                'compare': document.getElementById('tab-compare'),
+                'practice': document.getElementById('tab-practice')
+            };
+
+            Object.keys(tabs).forEach(k => {
+                if (k === mode) {
+                    tabs[k].className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-amber-500 text-slate-950 shadow flex items-center gap-1.5';
+                } else {
+                    tabs[k].className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white hover:bg-slate-800/70 flex items-center gap-1.5';
+                }
+            });
+
+            // 練習問題サブバーの表示切替
+            const pBar = document.getElementById('practice-subbar');
+            if (mode === 'practice') {
+                pBar.classList.remove('hidden');
+                pBar.classList.add('flex');
+            } else {
+                pBar.classList.add('hidden');
+                pBar.classList.remove('flex');
+            }
+
+            // 上部バッジ更新
+            const modeBadge = document.getElementById('mode-badge');
+            const alertBadge = document.getElementById('solvent-alert-badge');
+
+            if (mode === 'ex1') {
+                modeBadge.textContent = '例題1：硝酸カリウム KNO₃ (無水物)';
+                alertBadge.textContent = '★ 無水物のため、結晶が析出しても「溶媒(水)の質量」は変化しない！';
+                alertBadge.className = 'px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px]';
+            } else if (mode === 'ex2') {
+                modeBadge.textContent = '例題2：硫酸銅(II)五水和物 CuSO₄・5H₂O';
+                alertBadge.textContent = '★ 水和物のため、結晶水(5H₂O)として水が奪われ「溶媒(水)の質量」が減少する！';
+                alertBadge.className = 'px-2.5 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[11px]';
+            } else if (mode === 'compare') {
+                modeBadge.textContent = '徹底比較：無水物(KNO₃) vs 水和物(CuSO₄・5H₂O)';
+                alertBadge.textContent = '★ 冷却後の「残った水の高さ」の違いに注目！';
+                alertBadge.className = 'px-2.5 py-0.5 rounded-full font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 text-[11px]';
+            } else {
+                modeBadge.textContent = '教科書の練習問題（問4・問5・問6）';
+                alertBadge.textContent = '★ 比例関係を使って析出量・必要水量を求める';
+            }
+
+            setTimeout(resizeCanvases, 20);
+        }
+
+        function selectPractice(qId) {
+            practiceId = qId;
+            ['q4', 'q5', 'q6'].forEach(id => {
+                const btn = document.getElementById(`btn-${id}`);
+                btn.className = (id === qId)
+                    ? 'px-3 py-1 rounded-lg bg-purple-600 text-white font-bold transition'
+                    : 'px-3 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-semibold transition border border-slate-700';
+            });
+
+            const textEl = document.getElementById('practice-problem-text');
+            if (qId === 'q4') {
+                textEl.textContent = '問4：ホウ酸の溶解度は70℃で20、10℃で5.0。70℃の飽和水溶液200gを10℃に冷却すると何g析出するか。（答え：25g）';
+                setTemperature(20);
+            } else if (qId === 'q5') {
+                textEl.textContent = '問5：NaClの溶解度は80℃で38。80℃の飽和水溶液100gから同温度で水を20g蒸発させた。何g析出するか。（答え：7.6g）';
+                setTemperature(20);
+            } else {
+                textEl.textContent = '問6：CuSO₄の60℃溶解度は40。CuSO₄・5H₂O 50g（CuSO₄ 32g＋水18g）を水に溶かして60℃飽和溶液をつくるのに必要な水は何gか。（答え：62g）';
+                setTemperature(60);
+            }
+        }
+
+        function setEquationType(type) {
+            eqType = type;
+            const bSol = document.getElementById('btn-eq-sol');
+            const bWat = document.getElementById('btn-eq-water');
+            const bSolSm = document.getElementById('btn-eq-sol-sm');
+            const bWatSm = document.getElementById('btn-eq-wat-sm');
+
+            if (type === 'solution') {
+                bSol.className = 'px-2.5 py-1 rounded-lg bg-sky-600 text-white font-bold transition';
+                bWat.className = 'px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition';
+                bSolSm.className = 'px-2 py-0.5 rounded bg-sky-600 text-white font-bold';
+                bWatSm.className = 'px-2 py-0.5 rounded text-slate-400';
+            } else {
+                bWat.className = 'px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold transition';
+                bSol.className = 'px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition';
+                bWatSm.className = 'px-2 py-0.5 rounded bg-emerald-600 text-white font-bold';
+                bSolSm.className = 'px-2 py-0.5 rounded text-slate-400';
+            }
+        }
+
+        function setTemperature(temp) {
+            stopTempAnim();
+            currentTemp = Math.max(20.0, Math.min(60.0, temp));
+            document.getElementById('temp-slider').value = Math.round(currentTemp * 10);
+        }
+
+        function onTempSliderInput(val) {
+            stopTempAnim();
+            currentTemp = parseInt(val, 10) / 10.0;
+        }
+
+        function startTempAnim(dir) {
+            tempAnimDir = dir;
+            if (dir === -1 && currentTemp <= 20.2) currentTemp = 60.0;
+            if (dir === 1 && currentTemp >= 59.8) currentTemp = 20.0;
+        }
+
+        function stopTempAnim() {
+            tempAnimDir = 0;
+        }
+
+        function toggleDrawer() {
+            const drawer = document.getElementById('side-drawer');
+            const isClosed = drawer.classList.contains('translate-x-[110%]');
+            drawer.classList.toggle('translate-x-[110%]', !isClosed);
+            drawer.classList.toggle('translate-x-0', isClosed);
+        }
+
+        // 溶解度曲線グラフ上のドラッグ操作で温度を変更
+        function setupCurveInteraction() {
+            let isDragging = false;
+            const updateTempFromGraph = (clientX) => {
+                const rect = curveCanvas.getBoundingClientRect();
+                const x = clientX - rect.left;
+                const padL = 46, padR = 24;
+                const gw = rect.width - padL - padR;
+                const T = ((x - padL) / gw) * 80.0;
+                setTemperature(Math.max(20.0, Math.min(60.0, T)));
+            };
+            curveCanvas.addEventListener('pointerdown', (e) => {
+                isDragging = true;
+                updateTempFromGraph(e.clientX);
+            });
+            window.addEventListener('pointermove', (e) => {
+                if (isDragging) updateTempFromGraph(e.clientX);
+            });
+            window.addEventListener('pointerup', () => { isDragging = false; });
+        }
+
+        function resizeCanvases() {
+            const bWrap = document.getElementById('beaker-canvas-wrap');
+            const cWrap = document.getElementById('curve-canvas-wrap');
+            beakerCanvas.width = bWrap.clientWidth;
+            beakerCanvas.height = bWrap.clientHeight;
+            curveCanvas.width = cWrap.clientWidth;
+            curveCanvas.height = cWrap.clientHeight;
+        }
+
+        let lastRenderedStateKey = '';
+
+        function animateLoop() {
+            requestAnimationFrame(animateLoop);
+
+            if (tempAnimDir !== 0) {
+                currentTemp += tempAnimDir * 0.12; // ゆっくり温度が変化
+                if (currentTemp <= 20.0) { currentTemp = 20.0; stopTempAnim(); }
+                if (currentTemp >= 60.0) { currentTemp = 60.0; stopTempAnim(); }
+                document.getElementById('temp-slider').value = Math.round(currentTemp * 10);
+            }
+
+            const state = getSimulationState();
+            document.getElementById('temp-readout').textContent = `${state.T.toFixed(1)} ℃`;
+
+            // 状態が変わったときのみ数式DOMを更新（クリックイベントを妨げないため）
+            const stateKey = `${currentMode}_${practiceId}_${currentTemp.toFixed(1)}_${eqType}_${highlightPart}`;
+            if (stateKey !== lastRenderedStateKey) {
+                renderInteractiveEquation(state);
+                lastRenderedStateKey = stateKey;
+            }
+
+            drawBeakerAndRatioCanvas(state);
+            drawSolubilityCurveCanvas(state);
+        }
+
+        window.onload = () => {
+            resizeCanvases();
+            setupCurveInteraction();
+            window.addEventListener('resize', resizeCanvases);
+            animateLoop();
+        };
+    </script>
+</body>
+</html>
