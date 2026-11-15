@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高校化学 インタラクティブ3D教材ポータル</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & Noto Sans JP -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- QRCode.js (ブラウザ内で完結してQRコードを描画) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+        }
+        /* 横スクロールタブのスクロールバー非表示（モバイル操作性向上） */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* QRコードCanvasの中央配置調整 */
+        #qr-container img, #qr-container canvas {
+            margin: 0 auto;
+            border-radius: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col selection:bg-blue-100 selection:text-blue-900">
+
+    <!-- =====================================================================
+         ヘッダー領域：タイトル・検索・ポータル共有QRボタン
+    ====================================================================== -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                
+                <!-- タイトル・サブタイトル -->
+                <div class="flex items-center gap-3.5">
+                    <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center shadow-md shadow-blue-600/20 shrink-0">
+                        <i class="fa-solid fa-atom text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">高校化学 3D・インタラクティブ教材集</h1>
+                            <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                Chemistry Lab
+                            </span>
+                        </div>
+                        <p class="text-xs sm:text-sm text-slate-500 mt-0.5">分子の立体構造・結合・反応の仕組みを360°観察できるWebシミュレーター</p>
+                    </div>
+                </div>
+
+                <!-- 検索ボックス ＆ ポータルQRコード提示ボタン -->
+                <div class="flex items-center gap-2.5 w-full md:w-auto">
+                    <div class="relative flex-1 md:w-72">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input 
+                            type="text" 
+                            id="search-input" 
+                            placeholder="単元名・分子名・キーワード検索..." 
+                            class="w-full pl-9 pr-8 py-2.5 bg-slate-100/80 hover:bg-slate-100 focus:bg-white text-sm text-slate-800 placeholder-slate-400 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                        >
+                        <button id="clear-search-btn" onclick="clearSearch()" title="検索クリア" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+                            <i class="fa-solid fa-circle-xmark text-sm"></i>
+                        </button>
+                    </div>
+
+                    <button 
+                        onclick="openQrModal('高校化学 3D教材ポータル（トップページ）', window.location.href)" 
+                        class="shrink-0 inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-[0.99] text-white text-xs sm:text-sm font-semibold shadow-sm transition cursor-pointer"
+                        title="このポータルページのQRコードを大きく表示します"
+                    >
+                        <i class="fa-solid fa-qrcode"></i>
+                        <span class="hidden sm:inline">授業用QR表示</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 単元フィルタータブ（自動件数バッジ付き） -->
+            <nav aria-label="単元カテゴリー" class="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2 overflow-x-auto no-scrollbar" id="category-tabs">
+                <!-- JavaScriptで動的に生成されます -->
+            </nav>
+        </div>
+    </header>
+
+    <!-- =====================================================================
+         メインコンテンツ領域：ステータス表示 ＆ シミュレーターカード一覧
+    ====================================================================== -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        
+        <!-- 現在の絞り込み結果サマリー＆表示切替 -->
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-6">
+            <div class="flex items-center gap-2 text-sm text-slate-600">
+                <span id="current-filter-label" class="font-bold text-slate-900">すべての単元</span>
+                <span class="text-slate-300">|</span>
+                <span>表示件数: <strong id="visible-count" class="text-blue-600 font-bold">0</strong> 件</span>
+            </div>
+
+            <div class="flex items-center gap-3 text-xs text-slate-500">
+                <label class="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                    <input type="checkbox" id="hide-coming-soon" onchange="renderCards()" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4">
+                    <span>公開済みのみ表示</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- カードグリッドコンテナ -->
+        <div id="simulator-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- JavaScriptでカードが自動挿入されます -->
+        </div>
+
+        <!-- 検索結果0件時のエンプティステート -->
+        <div id="empty-state" class="hidden py-16 text-center bg-white rounded-3xl border border-slate-200/80 shadow-sm">
+            <div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                <i class="fa-solid fa-flask text-2xl"></i>
+            </div>
+            <h3 class="text-base font-bold text-slate-800">該当するシミュレーターが見つかりませんでした</h3>
+            <p class="text-sm text-slate-500 mt-1">別のキーワードで検索するか、単元フィルターを「すべて」に戻してください。</p>
+            <button onclick="resetAllFilters()" class="mt-4 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition">
+                すべての教材を表示する
+            </button>
+        </div>
+
+    </main>
+
+    <!-- =====================================================================
+         フッター領域：使い方・運用メモ
+    ====================================================================== -->
+    <footer class="bg-white border-t border-slate-200 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-circle-info text-blue-500"></i>
+                <span>各シミュレーターはChromebook・iPad・スマートフォンのブラウザで直接動作します（ピンチ操作で拡大縮小・ドラッグで回転）。</span>
+            </div>
+            <div class="text-slate-400 font-mono">
+                High School Chemistry 3D Simulators
+            </div>
+        </div>
+    </footer>
+
+    <!-- =====================================================================
+         授業提示用 QRコード拡大モーダル
+    ====================================================================== -->
+    <div id="qr-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeQrModalOnBackdrop(event)">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-100 text-center relative animate-[fadeIn_0.15s_ease-out]">
+            <button onclick="closeQrModal()" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition" aria-label="閉じる">
+                <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold mb-3">
+                <i class="fa-solid fa-mobile-screen-button"></i> 生徒端末アクセス用 QRコード
+            </div>
+            <h2 id="qr-modal-title" class="text-lg font-bold text-slate-900 leading-snug mb-5">
+                シミュレータータイトル
+            </h2>
+
+            <!-- QRコード描画エリア -->
+            <div class="bg-white p-4 rounded-2xl border-2 border-slate-200 inline-block shadow-inner mb-5">
+                <div id="qr-container" class="w-52 h-52 flex items-center justify-center"></div>
+            </div>
+
+            <!-- URL表示 ＆ コピーボタン -->
+            <div class="bg-slate-100 rounded-xl p-2.5 flex items-center justify-between gap-2 text-left border border-slate-200">
+                <span id="qr-modal-url" class="text-xs text-slate-600 font-mono truncate flex-1 select-all">
+                    https://...
+                </span>
+                <button onclick="copyModalUrl()" class="shrink-0 px-3 py-1.5 rounded-lg bg-white hover:bg-blue-50 text-blue-600 border border-slate-200 text-xs font-bold shadow-sm transition flex items-center gap-1.5">
+                    <i class="fa-regular fa-copy"></i> コピー
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         トースト通知（alert()の代わりに使用）
+    ====================================================================== -->
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 translate-y-3 transition-all duration-200">
+        <div class="bg-slate-900 text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2.5 text-sm font-medium border border-slate-700">
+            <i class="fa-solid fa-circle-check text-emerald-400"></i>
+            <span id="toast-message">URLをクリップボードにコピーしました</span>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         JavaScript：教材データ配列 ＆ UI制御ロジック
+    ====================================================================== -->
+    <script>
+        /**
+         * =====================================================================
+         * 【先生用：シミュレーター追加エリア】
+         * 新しいHTMLファイルを作成したら、下の `SIMULATORS` 配列に1ブロック追記するだけで
+         * カード・単元バッジ・検索・QRコードがすべて自動的に反映されます。
+         *
+         * 各項目の書き方：
+         *   id          : 一意の識別子（重複しない文字列）
+         *   title       : カードに表示される教材タイトル
+         *   category    : 次の5つから選択 -> '理論化学' | '無機化学' | '有機化学' | '高分子化合物' | '探究'
+         *   subUnit     : 教科書内の小単元名（例：'結晶格子', 'タンパク質と酵素'）
+         *   description : 生徒向けのわかりやすい説明文（2〜3行程度）
+         *   file        : 同じフォルダに置いたHTMLファイル名（例：'04_polymer_protein_2nd.html'）
+         *                 ※外部URL（'https://...'）を指定することも可能です
+         *   status      : 'published'（公開中・クリック可能） または 'coming_soon'（準備中表示）
+         *   icon        : FontAwesomeのアイコンクラス（例：'fa-dna', 'fa-cubes', 'fa-gem'）
+         *   tags        : 検索にヒットさせたい重要語句の配列
+         * =====================================================================
+         */
+        const SIMULATORS = [
+            // --- 高分子化合物 ---
+            {
+                id: 'polymer-protein-2nd',
+                title: 'タンパク質の2次構造（α-ヘリックス・β-シート）',
+                category: '高分子化合物',
+                subUnit: 'アミノ酸とタンパク質',
+                description: 'ポリペプチド鎖の水素結合によって形成されるらせん構造（0.54nm・アミノ酸3.6個/1回転）とジグザグ構造（逆平行・平行βシート）を実寸比率の3Dモデルで360°観察できます。',
+                file: '04_polymer_protein_2nd.html',
+                status: 'published',
+                icon: 'fa-dna',
+                tags: ['α-ヘリックス', 'β-シート', '水素結合', 'ペプチド結合', '側鎖R', '立体構造']
+            },
+
+            // --- 理論化学（追加テンプレート例） ---
+            {
+                id: 'theory-crystal-lattice',
+                title: '金属結晶の単位格子（体心立方・面心立方・六方最密）',
+                category: '理論化学',
+                subUnit: '物質の構成粒子と結晶',
+                description: '単位格子を切り出した断面モデルと空間充填モデルを切り替えながら、配位数・原子半径と格子定数の関係・充填率の導出を立体的に確認できます。',
+                file: '01_theory_crystal_lattice.html',
+                status: 'coming_soon',
+                icon: 'fa-cubes',
+                tags: ['体心立方格子', '面心立方格子', '六方最密構造', '配位数', '充填率', '単位格子']
+            },
+            {
+                id: 'theory-vsepr-molecules',
+                title: '共有結合の電子対反発と分子の形（VSEPR理論）',
+                category: '理論化学',
+                subUnit: '化学結合と分子の極性',
+                description: 'メタン（正四面体）、アンモニア（三角錐）、水（折れ線）などの非共有電子対を含む立体配置と結合角の違い、分子全体の極性の有無を視覚化します。',
+                file: '01_theory_molecular_shape.html',
+                status: 'coming_soon',
+                icon: 'fa-diagram-project',
+                tags: ['非共有電子対', '正四面体形', '極性分子', '無極性分子', '結合角']
+            },
+
+            // --- 無機化学（追加テンプレート例） ---
+            {
+                id: 'inorganic-complex-ions',
+                title: '錯イオンの立体構造と配位数（直線・正方形・正八面体）',
+                category: '無機化学',
+                subUnit: '遷移元素と錯イオン',
+                description: 'ジアンミン銀(I)イオン（直線形）、テトラアンミン銅(II)イオン（正方形）、ヘキサシアノ鉄(III)酸イオン（正八面体）の配位子の立体配置を回転して比較します。',
+                file: '02_inorganic_complex_ions.html',
+                status: 'coming_soon',
+                icon: 'fa-gem',
+                tags: ['配位結合', '配位数', '正八面体形', '正方形', '直線形', '遷移元素']
+            },
+
+            // --- 有機化学（追加テンプレート例） ---
+            {
+                id: 'organic-benzene-pi',
+                title: 'ベンゼン環の正六角形構造とπ電子の非局在化',
+                category: '有機化学',
+                subUnit: '芳香族炭化水素',
+                description: '12個の原子がすべて同一平面上に並ぶσ結合骨格と、上下に広がるπ電子雲の重なりを立体表示し、置換反応が起きやすい理由を考察します。',
+                file: '03_organic_benzene.html',
+                status: 'coming_soon',
+                icon: 'fa-hexagon-nodes',
+                tags: ['芳香族', 'π電子', '非局在化', '同一平面', '置換反応']
+            },
+            {
+                id: 'organic-optical-isomer',
+                title: '不斉炭素原子と鏡像異性体（光学異性体）',
+                category: '有機化学',
+                subUnit: '異性体の分類',
+                description: '乳酸やアラニンなどの鏡像関係にある2つの分子を3D空間内で回転・重ね合わせ操作を行い、どう回転させても重ならないことを体験的に検証します。',
+                file: '03_organic_optical_isomer.html',
+                status: 'coming_soon',
+                icon: 'fa-hands-holding-circle',
+                tags: ['不斉炭素原子', '鏡像異性体', '光学異性体', '立体異性体', 'キラリティ']
+            },
+
+            // --- 探究（追加テンプレート例） ---
+            {
+                id: 'inquiry-enzyme-substrate',
+                title: '酵素の活性部位と基質特異性（鍵と鍵穴モデル）',
+                category: '探究',
+                subUnit: '生命と物質・探究活動',
+                description: 'タンパク質の高次構造が作る活性部位の立体ポケットに基質が結合する様子と、熱やpH変化による「変性」で立体構造が崩れる過程をシミュレーションします。',
+                file: '05_inquiry_enzyme.html',
+                status: 'coming_soon',
+                icon: 'fa-puzzle-piece',
+                tags: ['酵素', '基質特異性', '変性', '高次構造', '触媒']
+            }
+        ];
+
+        // =====================================================================
+        // カテゴリー別のカラーテーマ定義（学術的で清潔感のある配色）
+        // =====================================================================
+        const CATEGORY_THEMES = {
+            'すべて': {
+                tabActive: 'bg-slate-900 text-white shadow-sm',
+                badge: 'bg-slate-100 text-slate-700 border-slate-200',
+                iconBg: 'bg-slate-100 text-slate-700',
+                accentBorder: 'hover:border-slate-300',
+                btnBg: 'bg-slate-900 hover:bg-slate-800 text-white'
+            },
+            '理論化学': {
+                tabActive: 'bg-blue-600 text-white shadow-sm shadow-blue-600/20',
+                badge: 'bg-blue-50 text-blue-700 border-blue-200',
+                iconBg: 'bg-blue-50 text-blue-600',
+                accentBorder: 'hover:border-blue-300',
+                btnBg: 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-600/20'
+            },
+            '無機化学': {
+                tabActive: 'bg-teal-600 text-white shadow-sm shadow-teal-600/20',
+                badge: 'bg-teal-50 text-teal-700 border-teal-200',
+                iconBg: 'bg-teal-50 text-teal-600',
+                accentBorder: 'hover:border-teal-300',
+                btnBg: 'bg-teal-600 hover:bg-teal-700 text-white shadow-sm shadow-teal-600/20'
+            },
+            '有機化学': {
+                tabActive: 'bg-amber-600 text-white shadow-sm shadow-amber-600/20',
+                badge: 'bg-amber-50 text-amber-800 border-amber-200',
+                iconBg: 'bg-amber-50 text-amber-600',
+                accentBorder: 'hover:border-amber-300',
+                btnBg: 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm shadow-amber-600/20'
+            },
+            '高分子化合物': {
+                tabActive: 'bg-violet-600 text-white shadow-sm shadow-violet-600/20',
+                badge: 'bg-violet-50 text-violet-700 border-violet-200',
+                iconBg: 'bg-violet-50 text-violet-600',
+                accentBorder: 'hover:border-violet-300',
+                btnBg: 'bg-violet-600 hover:bg-violet-700 text-white shadow-sm shadow-violet-600/20'
+            },
+            '探究': {
+                tabActive: 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20',
+                badge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                iconBg: 'bg-emerald-50 text-emerald-600',
+                accentBorder: 'hover:border-emerald-300',
+                btnBg: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20'
+            }
+        };
+
+        const CATEGORIES = ['すべて', '理論化学', '無機化学', '有機化学', '高分子化合物', '探究'];
+
+        // 状態変数
+        let currentCategory = 'すべて';
+        let currentSearchQuery = '';
+        let activeModalUrl = '';
+        let toastTimer = null;
+
+        // =====================================================================
+        // 初期化・描画処理
+        // =====================================================================
+        document.addEventListener('DOMContentLoaded', () => {
+            renderCategoryTabs();
+            renderCards();
+
+            // リアルタイム検索イベント
+            const searchInput = document.getElementById('search-input');
+            const clearBtn = document.getElementById('clear-search-btn');
+
+            searchInput.addEventListener('input', (e) => {
+                currentSearchQuery = e.target.value.trim();
+                clearBtn.classList.toggle('hidden', currentSearchQuery.length === 0);
+                renderCards();
+            });
+
+            // EscキーでQRモーダルを閉じる
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeQrModal();
+            });
+        });
+
+        // 単元タブと件数バッジの描画
+        function renderCategoryTabs() {
+            const nav = document.getElementById('category-tabs');
+            nav.innerHTML = '';
+
+            CATEGORIES.forEach(cat => {
+                const count = cat === 'すべて'
+                    ? SIMULATORS.length
+                    : SIMULATORS.filter(item => item.category === cat).length;
+
+                const isActive = currentCategory === cat;
+                const theme = CATEGORY_THEMES[cat] || CATEGORY_THEMES['すべて'];
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.onclick = () => {
+                    currentCategory = cat;
+                    renderCategoryTabs();
+                    renderCards();
+                };
+
+                btn.className = isActive
+                    ? `shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${theme.tabActive}`
+                    : `shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer`;
+
+                const badgeClass = isActive
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-200/80 text-slate-600';
+
+                btn.innerHTML = `
+                    <span>${cat}</span>
+                    <span class="px-1.5 py-0.5 rounded-md text-[11px] font-bold leading-none ${badgeClass}">${count}</span>
+                `;
+                nav.appendChild(btn);
+            });
+        }
+
+        // シミュレーターカードのフィルタリング＆描画
+        function renderCards() {
+            const grid = document.getElementById('simulator-grid');
+            const emptyState = document.getElementById('empty-state');
+            const countEl = document.getElementById('visible-count');
+            const filterLabelEl = document.getElementById('current-filter-label');
+            const hideComingSoon = document.getElementById('hide-coming-soon').checked;
+
+            const query = currentSearchQuery.toLowerCase();
+
+            const filtered = SIMULATORS.filter(item => {
+                // カテゴリー一致判定
+                if (currentCategory !== 'すべて' && item.category !== currentCategory) {
+                    return false;
+                }
+                // 公開済みのみ表示判定
+                if (hideComingSoon && item.status !== 'published') {
+                    return false;
+                }
+                // キーワード検索判定（タイトル・単元・説明・タグ）
+                if (query) {
+                    const searchTarget = [
+                        item.title,
+                        item.category,
+                        item.subUnit,
+                        item.description,
+                        ...(item.tags || [])
+                    ].join(' ').toLowerCase();
+                    return searchTarget.includes(query);
+                }
+                return true;
+            });
+
+            filterLabelEl.textContent = currentCategory === 'すべて' ? 'すべての単元' : currentCategory;
+            countEl.textContent = filtered.length;
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '';
+                grid.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            grid.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+            grid.innerHTML = '';
+
+            filtered.forEach(item => {
+                const theme = CATEGORY_THEMES[item.category] || CATEGORY_THEMES['理論化学'];
+                const isPublished = item.status === 'published';
+                const fullUrl = resolveSimulatorUrl(item.file);
+
+                const card = document.createElement('article');
+                card.className = `bg-white rounded-2xl border border-slate-200/90 ${isPublished ? theme.accentBorder + ' hover:shadow-lg hover:-translate-y-0.5' : 'opacity-80'} transition-all duration-200 flex flex-col justify-between overflow-hidden shadow-sm`;
+
+                // タグHTML生成
+                const tagsHtml = (item.tags || []).map(tag => `
+                    <span class="inline-block px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-medium">
+                        #${escapeHtml(tag)}
+                    </span>
+                `).join('');
+
+                // アクションボタンHTML（公開中 vs 準備中）
+                const actionAreaHtml = isPublished
+                    ? `
+                        <div class="flex items-center gap-2 pt-4 mt-4 border-t border-slate-100">
+                            <a href="${escapeHtml(item.file)}" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition ${theme.btnBg}">
+                                <span>シミュレーターを開く</span>
+                                <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+                            </a>
+                            <button 
+                                type="button"
+                                onclick="openQrModal('${escapeJsString(item.title)}', '${escapeJsString(fullUrl)}')" 
+                                class="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                                title="この教材のQRコードを表示"
+                                aria-label="QRコード表示"
+                            >
+                                <i class="fa-solid fa-qrcode text-base"></i>
+                            </button>
+                            <button 
+                                type="button"
+                                onclick="copyTextToClipboard('${escapeJsString(fullUrl)}', '「${escapeJsString(item.title)}」のURLをコピーしました')" 
+                                class="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                                title="リンクURLをコピー"
+                                aria-label="URLをコピー"
+                            >
+                                <i class="fa-regular fa-copy text-base"></i>
+                            </button>
+                        </div>
+                    `
+                    : `
+                        <div class="flex items-center justify-between pt-4 mt-4 border-t border-slate-100">
+                            <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+                                <i class="fa-regular fa-clock"></i> 教材データ準備中
+                            </span>
+                            <span class="text-[11px] font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded">
+                                ${escapeHtml(item.file)}
+                            </span>
+                        </div>
+                    `;
+
+                card.innerHTML = `
+                    <div class="p-5 sm:p-6 flex-1 flex flex-col">
+                        <!-- 上部：単元バッジ ＆ ステータス -->
+                        <div class="flex items-center justify-between gap-2 mb-3.5">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${theme.badge}">
+                                    ${escapeHtml(item.category)}
+                                </span>
+                                <span class="text-xs font-medium text-slate-400">
+                                    ${escapeHtml(item.subUnit)}
+                                </span>
+                            </div>
+                            ${isPublished
+                                ? '<span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>公開中</span>'
+                                : '<span class="inline-flex items-center text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">予定</span>'
+                            }
+                        </div>
+
+                        <!-- タイトル ＆ アイコン -->
+                        <div class="flex items-start gap-3 mb-2.5">
+                            <div class="w-10 h-10 rounded-xl ${theme.iconBg} flex items-center justify-center shrink-0 mt-0.5">
+                                <i class="fa-solid ${escapeHtml(item.icon || 'fa-atom')} text-base"></i>
+                            </div>
+                            <h2 class="text-base font-bold text-slate-900 leading-snug">
+                                ${escapeHtml(item.title)}
+                            </h2>
+                        </div>
+
+                        <!-- 説明文 -->
+                        <p class="text-xs sm:text-sm text-slate-600 leading-relaxed mb-4 flex-1">
+                            ${escapeHtml(item.description)}
+                        </p>
+
+                        <!-- キーワードタグ -->
+                        <div class="flex flex-wrap gap-1.5">
+                            ${tagsHtml}
+                        </div>
+
+                        <!-- 下部アクションボタン -->
+                        ${actionAreaHtml}
+                    </div>
+                `;
+
+                grid.appendChild(card);
+            });
+        }
+
+        // =====================================================================
+        // ユーティリティ：URL解決・QRコードモーダル・クリップボードコピー
+        // =====================================================================
+        function resolveSimulatorUrl(filePath) {
+            try {
+                return new URL(filePath, window.location.href).href;
+            } catch (e) {
+                return filePath;
+            }
+        }
+
+        function openQrModal(title, url) {
+            const modal = document.getElementById('qr-modal');
+            const titleEl = document.getElementById('qr-modal-title');
+            const urlEl = document.getElementById('qr-modal-url');
+            const qrContainer = document.getElementById('qr-container');
+
+            activeModalUrl = url;
+            titleEl.textContent = title;
+            urlEl.textContent = url;
+
+            // 既存のQRコードをクリアして新規生成
+            qrContainer.innerHTML = '';
+            new QRCode(qrContainer, {
+                text: url,
+                width: 200,
+                height: 200,
+                colorDark: '#0f172a',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.M
+            });
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeQrModal() {
+            const modal = document.getElementById('qr-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function closeQrModalOnBackdrop(event) {
+            if (event.target.id === 'qr-modal') {
+                closeQrModal();
+            }
+        }
+
+        function copyModalUrl() {
+            if (activeModalUrl) {
+                copyTextToClipboard(activeModalUrl, 'QRコードのリンクURLをコピーしました');
+            }
+        }
+
+        // iFrameや各種ブラウザ環境でも確実に動作するクリップボードコピー
+        function copyTextToClipboard(text, successMsg) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.top = '-9999px';
+            textArea.style.left = '-9999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                document.execCommand('copy');
+                showToast(successMsg || 'URLをコピーしました');
+            } catch (err) {
+                showToast('URLのコピーに失敗しました');
+            }
+
+            document.body.removeChild(textArea);
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const msgEl = document.getElementById('toast-message');
+            msgEl.textContent = message;
+
+            toast.classList.remove('opacity-0', 'translate-y-3');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            if (toastTimer) clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-3');
+            }, 2600);
+        }
+
+        function clearSearch() {
+            const searchInput = document.getElementById('search-input');
+            searchInput.value = '';
+            currentSearchQuery = '';
+            document.getElementById('clear-search-btn').classList.add('hidden');
+            renderCards();
+        }
+
+        function resetAllFilters() {
+            currentCategory = 'すべて';
+            document.getElementById('hide-coming-soon').checked = false;
+            clearSearch();
+            renderCategoryTabs();
+            renderCards();
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function escapeJsString(str) {
+            if (!str) return '';
+            return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+    </script>
+</body>
+</html>
