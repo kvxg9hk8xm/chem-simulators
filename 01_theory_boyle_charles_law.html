@@ -1,0 +1,2593 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>気体の体積と圧力・温度：ボイル・シャルルの法則シミュレーター</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js & OrbitControls for 3D p-V-T Surface -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body {
+            font-family: 'Noto Sans JP', 'Inter', sans-serif;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.3); }
+        ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.8); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen overflow-hidden flex flex-col relative">
+
+    <!-- =====================================================================
+         上部ヘッダー（3法則のモード切替・解説ドロワー）
+    ====================================================================== -->
+    <header class="w-full px-3 pt-2 pb-1.5 z-20 flex flex-wrap items-center justify-between gap-2 shrink-0 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md">
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full py-0.5">
+            <a href="index.html" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition shrink-0" title="目次ポータルへ戻る">
+                <i class="fa-solid fa-house text-sky-400"></i>
+                <span class="hidden sm:inline">目次</span>
+            </a>
+
+            <!-- 3モード切替タブ -->
+            <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 shrink-0">
+                <button id="tab-boyle" onclick="selectMode('boyle')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-600 text-white shadow flex items-center gap-1.5">
+                    <i class="fa-solid fa-weight-hanging"></i>
+                    <span>1. ボイルの法則 <span class="hidden md:inline font-normal opacity-90">(T一定: pV = k)</span></span>
+                </button>
+                <button id="tab-charles" onclick="selectMode('charles')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white hover:bg-slate-800/70 flex items-center gap-1.5">
+                    <i class="fa-solid fa-temperature-half text-rose-400"></i>
+                    <span>2. シャルルの法則 <span class="hidden md:inline font-normal opacity-90">(p一定: V/T = k)</span></span>
+                </button>
+                <button id="tab-combined" onclick="selectMode('combined')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-amber-300 hover:text-white hover:bg-slate-800/70 flex items-center gap-1.5 border border-amber-500/30">
+                    <i class="fa-solid fa-cube text-amber-400"></i>
+                    <span>3. ボイル・シャルルの法則 <span class="hidden md:inline font-normal opacity-90">(3D空間曲面 pV/T = k)</span></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 右側：サブ設定 ＆ 解説ドロワー -->
+        <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+            <!-- ボイルの法則用：グラフ軸変換ボタン -->
+            <div id="boyle-graph-switcher" class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 text-[11px]">
+                <span class="text-slate-400 px-1.5 hidden xl:inline">グラフ切替:</span>
+                <button id="btn-bg-vp" onclick="setBoyleGraphType('V_p')" class="px-2 py-1 rounded-lg bg-sky-600 text-white font-bold transition">V - p (反比例)</button>
+                <button id="btn-bg-vinvp" onclick="setBoyleGraphType('V_invP')" class="px-2 py-1 rounded-lg text-slate-300 hover:text-white transition">V - 1/p (比例直線)</button>
+                <button id="btn-bg-pvp" onclick="setBoyleGraphType('pV_p')" class="px-2 py-1 rounded-lg text-slate-300 hover:text-white transition">pV - p (一定)</button>
+            </div>
+
+            <!-- 3Dボイル・シャルル用：カメラ視点プリセット -->
+            <div id="combined-camera-presets" class="hidden items-center bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 text-[11px]">
+                <span class="text-slate-400 px-1.5 hidden xl:inline">3D視点切替:</span>
+                <button id="btn-cam-iso" onclick="set3DCamera('iso')" class="px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold transition shadow">
+                    📐 立体曲面 (資料集)
+                </button>
+                <button id="btn-cam-boyle" onclick="set3DCamera('boyle')" class="px-2.5 py-1 rounded-lg bg-slate-800 text-sky-300 hover:bg-sky-600 hover:text-white font-semibold transition border border-sky-500/30">
+                    📐 ボイルのグラフに見える角度 (V-p正面)
+                </button>
+                <button id="btn-cam-charles" onclick="set3DCamera('charles')" class="px-2.5 py-1 rounded-lg bg-slate-800 text-emerald-300 hover:bg-emerald-600 hover:text-white font-semibold transition border border-emerald-500/30">
+                    📐 シャルルのグラフに見える角度 (V-T側面)
+                </button>
+                <button id="btn-cam-pt" onclick="set3DCamera('pt')" class="px-2 py-1 rounded-lg bg-slate-800 text-purple-300 hover:bg-purple-600 hover:text-white font-semibold transition hidden md:inline-block">
+                    上 (p-T面)
+                </button>
+            </div>
+
+            <button onclick="toggleDrawer()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition shadow flex items-center gap-1.5">
+                <i class="fa-solid fa-calculator"></i>
+                <span>実験計算・解説</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- =====================================================================
+         メインビューポート
+         - モード1 & 2: 左5列＝ピストン/注射器実験シミュレーション、右7列＝インタラクティブグラフ＆計算フロー
+         - モード3 (3D): 左8列＝Three.js 3D p-V-T 空間曲面＆切断平面、右4列＝断面グラフ＆2状態計算
+    ====================================================================== -->
+    <main class="flex-1 w-full overflow-hidden relative bg-slate-950 flex flex-col">
+        
+        <!-- ▼ モード1＆2用 2Dスプリットビュー -->
+        <div id="view-2d-modes" class="flex-1 w-full h-full grid grid-cols-1 lg:grid-cols-12 gap-2 p-2 sm:p-2.5 overflow-hidden">
+            
+            <!-- 左側（5列）：ピストン・注射器＆分子衝突シミュレーション Canvas -->
+            <section class="lg:col-span-5 relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-900/70 flex flex-col min-h-[240px]">
+                <div class="px-3 py-1.5 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between gap-2 text-xs z-10">
+                    <span id="sim-badge" class="px-2.5 py-0.5 rounded-full font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40">
+                        温度一定：おもりとピストンによる圧縮・膨張
+                    </span>
+                    <span id="collision-readout" class="text-[11px] font-mono text-amber-300">
+                        壁への衝突頻度(圧力p): 中
+                    </span>
+                </div>
+                <div class="flex-1 relative w-full h-full overflow-hidden" id="sim2d-canvas-wrap">
+                    <canvas id="sim2d-canvas" class="w-full h-full block"></canvas>
+                </div>
+            </section>
+
+            <!-- 右側（7列）：リアルタイムグラフ（上段） ＆ 資料集の実験データ・計算フロー（下段） -->
+            <section class="lg:col-span-7 flex flex-col gap-2 overflow-hidden min-h-[260px]">
+                
+                <!-- 右上：リアルタイム同期グラフ Canvas -->
+                <div class="flex-1 relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-900/70 flex flex-col min-h-[190px]">
+                    <div class="px-3 py-1.5 bg-slate-900/95 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs z-10">
+                        <div class="font-bold text-slate-100 flex items-center gap-1.5">
+                            <i class="fa-solid fa-chart-line text-sky-400"></i>
+                            <span id="graph2d-title">ボイルの法則：気体の体積 V と圧力 p の関係 (温度一定)</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-[11px]" id="compare-curve-selector">
+                            <span class="text-slate-400">比較曲線:</span>
+                            <button onclick="toggleCompareCurves()" id="btn-comp-curves" class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold">
+                                高温・低温の比較表示: ON
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex-1 relative w-full h-full overflow-hidden" id="graph2d-canvas-wrap">
+                        <canvas id="graph2d-canvas" class="w-full h-full block cursor-pointer"></canvas>
+                        <div class="absolute top-2 right-2.5 pointer-events-none text-[10px] text-slate-400 bg-slate-950/80 px-2 py-1 rounded-lg border border-slate-800">
+                            <i class="fa-solid fa-hand-pointer text-amber-400 mr-1"></i>グラフ上の丸印を直接ドラッグして状態を動かせます
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右下：資料集の注射器実験データ＆ワンタップ連動カード -->
+                <div class="rounded-2xl border border-slate-800 bg-slate-900/90 p-3 shrink-0 shadow-lg">
+                    <div id="experiment-data-panel">
+                        <!-- JSでボイル実験またはシャルル実験の表と計算式を動的描画 -->
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ▼ モード3用 3Dボイル・シャルル空間曲面 (p-V-T) ビュー -->
+        <div id="view-3d-mode" class="hidden flex-1 w-full h-full grid-cols-1 lg:grid-cols-12 gap-2 p-2 sm:p-2.5 overflow-hidden">
+            
+            <!-- 左側（8列）：Three.js 3D p-V-T 曲面＆切断平面ビューポート -->
+            <section class="lg:col-span-8 relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-900/80 flex flex-col min-h-[260px]">
+                <div class="px-3 py-1.5 bg-slate-900/95 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs z-10">
+                    <div class="flex items-center gap-1.5">
+                        <span class="px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            3D空間 (p, V, T) 曲面：pV / T = k
+                        </span>
+                        <button id="btn-proj-mode" onclick="toggle3DProjectionMode()" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold border border-slate-700 transition" title="透視投影（遠近感あり）と平行投影（2Dグラフと完全一致）を切り替えます">
+                            投影: 遠近3D
+                        </button>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <button id="btn-aux-lines" onclick="toggle3DAuxLines()" class="px-2.5 py-0.5 rounded-lg bg-amber-500 text-slate-950 font-bold transition shadow">
+                            <i class="fa-solid fa-compass-drafting mr-1"></i>3D補助線・垂線: ON
+                        </button>
+                        <button id="btn-mesh-lines" onclick="toggle3DMeshLines()" class="px-2.5 py-0.5 rounded-lg bg-indigo-600 text-white font-bold transition shadow">
+                            <i class="fa-solid fa-border-all mr-1"></i>曲面メッシュ線: ON
+                        </button>
+                        <button id="btn-slice-t" onclick="toggle3DSlice('T')" class="px-2.5 py-0.5 rounded-lg bg-sky-600 text-white font-bold transition shadow">
+                            T一定断面(青)
+                        </button>
+                        <button id="btn-slice-p" onclick="toggle3DSlice('p')" class="px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white font-bold transition shadow">
+                            p一定断面(緑)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Three.js Canvas Container -->
+                <div class="flex-1 relative w-full h-full overflow-hidden" id="three-container">
+                    <canvas id="three-canvas" class="w-full h-full block"></canvas>
+
+                    <!-- 視点アングル解説バナー（見る角度によってボイル・シャルルのグラフに見えることを明示） -->
+                    <div id="camera-angle-banner" class="absolute top-3 left-3 right-3 sm:right-auto sm:max-w-lg pointer-events-none glass-panel px-3.5 py-2 rounded-2xl border border-amber-500/40 shadow-xl transition-all duration-300">
+                        <div id="camera-angle-title" class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                            <i class="fa-solid fa-cube"></i>
+                            <span>立体俯瞰アングル（資料集の3D曲面 pV/T = 一定）</span>
+                        </div>
+                        <p id="camera-angle-desc" class="text-[11px] text-slate-300 mt-0.5 leading-snug">
+                            上の「📐 ボイルのグラフに見える角度」「📐 シャルルのグラフに見える角度」を押すと、3D曲面が回転し、2次元の反比例グラフ・比例直線グラフと完全に重なって見えます！
+                        </p>
+                    </div>
+
+                    <!-- 3D画面左下のミニシリンダー（3D状態の気体体積・温度・分子運動をリアルタイム連動表示） -->
+                    <div class="absolute bottom-2.5 right-3 pointer-events-none glass-panel p-2.5 rounded-2xl border border-amber-500/40 shadow-2xl flex items-center gap-3">
+                        <canvas id="mini-cyl-3d" width="90" height="110" class="rounded-lg bg-slate-950/90 border border-slate-800"></canvas>
+                        <div class="text-xs font-mono space-y-1.5 pr-1.5">
+                            <div class="font-sans font-bold text-amber-300 text-[11px] border-b border-slate-700/80 pb-0.5">● 現在の気体状態 (p, V, T)</div>
+                            <div class="text-rose-400 font-bold text-sm">p = <span id="mini3d-p" class="text-white text-base">1.50</span> <span class="text-[11px] font-normal">×10⁵ Pa</span></div>
+                            <div class="text-emerald-400 font-bold text-sm">V = <span id="mini3d-v" class="text-white text-base">26.7</span> <span class="text-[11px] font-normal">mL</span></div>
+                            <div class="text-sky-400 font-bold text-sm">T = <span id="mini3d-t" class="text-white text-base">300</span> <span class="text-[11px] font-normal">K</span></div>
+                        </div>
+                    </div>
+                    
+                    <!-- 3D操作ガイド＆軸凡例オーバーレイ -->
+                    <div class="absolute bottom-2.5 left-3 pointer-events-none glass-panel px-3 py-2 rounded-xl text-[11px] space-y-1">
+                        <div class="font-bold text-slate-200 flex flex-wrap items-center gap-2">
+                            <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-rose-500 mr-1"></span>横軸(X): 圧力 p</span>
+                            <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 mr-1"></span>縦軸(Y): 体積 V</span>
+                            <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-sky-400 mr-1"></span>奥行(Z): 絶対温度 T</span>
+                        </div>
+                        <div class="text-[10px] text-slate-400">
+                            黄色の破線＝各座標面(p-V面, V-T面, p-T床面)への垂線・補助線
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 右側（4列）：切断面（ボイル断面・シャルル断面）の2D投影グラフ ＆ p1V1/T1 = p2V2/T2 計算カード -->
+            <section class="lg:col-span-4 flex flex-col gap-2 overflow-hidden">
+                <!-- 上段：切断面リアルタイム2Dグラフ -->
+                <div class="flex-1 relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-900/80 flex flex-col min-h-[180px]">
+                    <div class="px-3 py-1.5 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between text-xs">
+                        <span class="font-bold text-amber-300"><i class="fa-solid fa-scissors mr-1.5"></i>切断面の2Dグラフ比較</span>
+                        <span class="text-[10px] text-slate-400">左: T一定断面 / 右: p一定断面</span>
+                    </div>
+                    <div class="flex-1 relative w-full h-full overflow-hidden" id="slice2d-canvas-wrap">
+                        <canvas id="slice2d-canvas" class="w-full h-full block"></canvas>
+                    </div>
+                </div>
+
+                <!-- 下段：ボイル・シャルルの法則 状態1 ⇄ 状態2 リアルタイム計算パネル -->
+                <div class="rounded-2xl border border-slate-800 bg-slate-900/90 p-3.5 space-y-2.5 shrink-0 text-xs">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                        <span class="font-bold text-amber-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-equals"></i> ボイル・シャルルの法則の成立確認
+                        </span>
+                        <span class="font-mono text-[11px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
+                            p₁V₁ / T₁ ＝ p₂V₂ / T₂ ＝ k
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 text-[11px]">
+                        <!-- 基準状態1 (固定または記憶) -->
+                        <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-1">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-slate-300">● 状態1 (基準点)</span>
+                                <button onclick="saveCurrentAsState1()" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 text-[10px] border border-slate-700">
+                                    現在値を記憶
+                                </button>
+                            </div>
+                            <div class="font-mono text-slate-300 space-y-0.5 pt-0.5">
+                                <div>p₁ = <strong id="st1-p" class="text-white">1.00</strong> ×10⁵ Pa</div>
+                                <div>V₁ = <strong id="st1-v" class="text-white">40.0</strong> mL</div>
+                                <div>T₁ = <strong id="st1-t" class="text-white">300</strong> K (27℃)</div>
+                                <div class="text-sky-400 font-bold pt-1 border-t border-slate-800/80">
+                                    p₁V₁/T₁ = <span id="st1-k">13.3</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 現在状態2 (スライダー連動・曲面上の赤い球) -->
+                        <div class="bg-amber-950/25 p-2.5 rounded-xl border border-amber-500/40 space-y-1">
+                            <div class="font-bold text-amber-300">● 状態2 (現在の切断面交点)</div>
+                            <div class="font-mono text-slate-200 space-y-0.5 pt-0.5">
+                                <div>p₂ = <strong id="st2-p" class="text-rose-400">1.50</strong> ×10⁵ Pa</div>
+                                <div>V₂ = <strong id="st2-v" class="text-emerald-400">26.7</strong> mL</div>
+                                <div>T₂ = <strong id="st2-t" class="text-sky-400">300</strong> K (27℃)</div>
+                                <div class="text-amber-300 font-bold pt-1 border-t border-amber-500/30">
+                                    p₂V₂/T₂ = <span id="st2-k">13.3</span> (一定!)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- =====================================================================
+         下部コントロールバー（自動再生バー ＋ モード別スライダーと実験プリセット）
+    ====================================================================== -->
+    <footer class="w-full px-3 sm:px-4 py-1.5 bg-slate-900 border-t border-slate-800 z-20 shrink-0 space-y-1.5">
+        
+        <!-- ★ 全モード共通：自動状態変化（オートアニメーション）コントロールバー -->
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 pb-1 border-b border-slate-800/80 text-xs">
+            <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-[11px] font-bold text-emerald-400 flex items-center gap-1 mr-1">
+                    <i class="fa-solid fa-film"></i> 自動状態変化:
+                </span>
+                <button id="btn-auto-rev" onclick="startAutoPlay(-1)" class="px-2.5 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold flex items-center gap-1 shadow transition">
+                    <i class="fa-solid fa-backward-step"></i>
+                    <span id="auto-rev-label">◀ 逆変化 (膨張/冷却)</span>
+                </button>
+                <button id="btn-auto-pause" onclick="stopAutoPlay()" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1 border border-slate-700 transition">
+                    <i class="fa-solid fa-pause"></i>
+                    <span>停止</span>
+                </button>
+                <button id="btn-auto-fwd" onclick="startAutoPlay(1)" class="px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold flex items-center gap-1 shadow transition">
+                    <span id="auto-fwd-label">▶ 順変化 (圧縮/加熱)</span>
+                    <i class="fa-solid fa-forward-step"></i>
+                </button>
+                <button id="btn-auto-loop" onclick="startAutoPlay(2)" class="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 shadow transition">
+                    <i class="fa-solid fa-repeat"></i>
+                    <span>⇄ 往復連続オート</span>
+                </button>
+            </div>
+
+            <!-- モード3専用：3D自動変化の軌道パターン選択 -->
+            <div id="combined-anim-pattern" class="hidden items-center bg-slate-950 px-2 py-0.5 rounded-xl border border-amber-500/30 gap-1 text-[11px]">
+                <span class="text-amber-300 font-bold">3D変化軌道:</span>
+                <button id="btn-3dpat-boyle" onclick="set3DAnimPattern('boyle')" class="px-2 py-0.5 rounded bg-sky-600 text-white font-bold">T一定(ボイル曲線)</button>
+                <button id="btn-3dpat-charles" onclick="set3DAnimPattern('charles')" class="px-2 py-0.5 rounded text-slate-300 hover:text-white">p一定(シャルル直線)</button>
+                <button id="btn-3dpat-both" onclick="set3DAnimPattern('both')" class="px-2 py-0.5 rounded text-slate-300 hover:text-white">p・T同時変化(曲面横断)</button>
+            </div>
+
+            <!-- 変化スピード選択 -->
+            <div class="flex items-center bg-slate-950 px-2 py-0.5 rounded-xl border border-slate-800 gap-1">
+                <span class="text-[10px] text-slate-400">変化速度:</span>
+                <button onclick="setAutoSpeed(0.25)" id="spd-0.25" class="px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-400 hover:text-white">0.25x</button>
+                <button onclick="setAutoSpeed(0.5)" id="spd-0.5" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">0.5x(ゆっくり)</button>
+                <button onclick="setAutoSpeed(1.0)" id="spd-1" class="px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-400 hover:text-white">1.0x</button>
+                <button onclick="setAutoSpeed(2.0)" id="spd-2" class="px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-400 hover:text-white">2.0x</button>
+            </div>
+        </div>
+
+        <!-- 1. ボイルの法則コントロール -->
+        <div id="controls-boyle" class="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-3">
+            <!-- 資料集の実験データプリセットボタン -->
+            <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+                <span class="text-[11px] font-bold text-slate-400 mr-1"><i class="fa-solid fa-syringe text-sky-400 mr-1"></i>資料集の実験値:</span>
+                <button onclick="setBoylePreset(1.0)" id="btn-bp-1" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-sky-600 text-slate-200 hover:text-white text-xs font-bold transition border border-slate-700">
+                    ① p₁ = 1.0×10⁵ Pa (V₁ = 40 mL)
+                </button>
+                <button onclick="setBoylePreset(1.2)" id="btn-bp-2" class="px-2.5 py-1 rounded-xl bg-rose-600 text-white text-xs font-bold transition shadow">
+                    ② 基準 p₂ = 1.2×10⁵ Pa (V₂ = 33 mL)
+                </button>
+                <button onclick="setBoylePreset(1.5)" id="btn-bp-3" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-sky-600 text-slate-200 hover:text-white text-xs font-bold transition border border-slate-700">
+                    ③ p₃ = 1.5×10⁵ Pa (V₃ = 27 mL)
+                </button>
+            </div>
+
+            <!-- 圧力 p 連続スライダー -->
+            <div class="flex-1 w-full flex items-center gap-2.5 bg-slate-950/90 px-3.5 py-1.5 rounded-xl border border-slate-800">
+                <span class="text-[11px] font-bold text-sky-400 shrink-0">低圧 0.6×10⁵ Pa</span>
+                <input 
+                    type="range" 
+                    id="boyle-p-slider" 
+                    min="60" 
+                    max="250" 
+                    value="120" 
+                    oninput="onBoylePSlider(this.value)"
+                    class="w-full accent-sky-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                >
+                <span class="text-[11px] font-bold text-rose-400 shrink-0">高圧 2.5×10⁵ Pa</span>
+            </div>
+
+            <!-- 設定温度切り替え（低温・中温・高温） -->
+            <div class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 shrink-0 text-[11px]">
+                <span class="text-slate-400 px-1.5">等温線の温度:</span>
+                <button onclick="setBoyleTempLevel('low')" id="btn-bt-low" class="px-2 py-0.5 rounded-lg text-sky-300 hover:bg-slate-800">低温</button>
+                <button onclick="setBoyleTempLevel('mid')" id="btn-bt-mid" class="px-2 py-0.5 rounded-lg bg-sky-600 text-white font-bold">基準 (300K)</button>
+                <button onclick="setBoyleTempLevel('high')" id="btn-bt-high" class="px-2 py-0.5 rounded-lg text-rose-300 hover:bg-slate-800">高温</button>
+            </div>
+        </div>
+
+        <!-- 2. シャルルの法則コントロール -->
+        <div id="controls-charles" class="hidden max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-3">
+            <!-- 資料集の実験データプリセットボタン -->
+            <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+                <span class="text-[11px] font-bold text-slate-400 mr-1"><i class="fa-solid fa-temperature-ThreeQuarters text-rose-400 mr-1"></i>資料集の実験値:</span>
+                <button onclick="setCharlesPreset(-273)" class="px-2 py-1 rounded-xl bg-slate-800 hover:bg-indigo-600 text-indigo-300 hover:text-white text-[11px] font-bold transition border border-indigo-500/40">
+                    絶対零度 -273℃ (0 K)
+                </button>
+                <button onclick="setCharlesPreset(0)" id="btn-cp-0" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-sky-600 text-slate-200 hover:text-white text-xs font-bold transition border border-slate-700">
+                    ① 0℃ (273 K → 2.3 mL)
+                </button>
+                <button onclick="setCharlesPreset(40)" id="btn-cp-40" class="px-2.5 py-1 rounded-xl bg-rose-600 text-white text-xs font-bold transition shadow">
+                    ② 基準 40℃ (313 K → 2.6 mL)
+                </button>
+                <button onclick="setCharlesPreset(80)" id="btn-cp-80" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-sky-600 text-slate-200 hover:text-white text-xs font-bold transition border border-slate-700">
+                    ③ 80℃ (353 K → 2.9 mL)
+                </button>
+            </div>
+
+            <!-- 温度 t [℃] / T [K] 連続スライダー -->
+            <div class="flex-1 w-full flex items-center gap-2.5 bg-slate-950/90 px-3.5 py-1.5 rounded-xl border border-slate-800">
+                <span class="text-[11px] font-bold text-indigo-400 shrink-0">-273℃ (0 K)</span>
+                <input 
+                    type="range" 
+                    id="charles-t-slider" 
+                    min="-273" 
+                    max="180" 
+                    value="40" 
+                    oninput="onCharlesTSlider(this.value)"
+                    class="w-full accent-rose-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                >
+                <span class="text-[11px] font-bold text-rose-400 shrink-0">180℃ (453 K)</span>
+            </div>
+
+            <!-- 圧力条件切り替え（低圧・基準・高圧） -->
+            <div class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 shrink-0 text-[11px]">
+                <span class="text-slate-400 px-1.5">等圧線の圧力:</span>
+                <button onclick="setCharlesPressLevel('low')" id="btn-cp-low" class="px-2 py-0.5 rounded-lg text-sky-300 hover:bg-slate-800">低圧(傾き大)</button>
+                <button onclick="setCharlesPressLevel('mid')" id="btn-cp-mid" class="px-2 py-0.5 rounded-lg bg-rose-600 text-white font-bold">基準圧</button>
+                <button onclick="setCharlesPressLevel('high')" id="btn-cp-high" class="px-2 py-0.5 rounded-lg text-amber-300 hover:bg-slate-800">高圧(傾き小)</button>
+            </div>
+        </div>
+
+        <!-- 3. ボイル・シャルルの法則（3D切断スライダー）コントロール -->
+        <div id="controls-combined" class="hidden max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-3">
+            <!-- 切断平面1：温度 T スライダー -->
+            <div class="flex-1 w-full flex items-center gap-2.5 bg-slate-950/90 px-3.5 py-1.5 rounded-xl border border-sky-500/40">
+                <span class="text-xs font-bold text-sky-400 shrink-0 flex items-center gap-1">
+                    <i class="fa-solid fa-temperature-half"></i> 切断面 T (絶対温度):
+                </span>
+                <input 
+                    type="range" 
+                    id="combined-t-slider" 
+                    min="150" 
+                    max="500" 
+                    value="300" 
+                    oninput="onCombinedSlider()"
+                    class="w-full accent-sky-400 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                >
+                <span id="combined-t-val" class="text-xs font-mono font-bold text-sky-300 w-24 text-right shrink-0">300 K (27℃)</span>
+            </div>
+
+            <!-- 切断平面2：圧力 p スライダー -->
+            <div class="flex-1 w-full flex items-center gap-2.5 bg-slate-950/90 px-3.5 py-1.5 rounded-xl border border-emerald-500/40">
+                <span class="text-xs font-bold text-emerald-400 shrink-0 flex items-center gap-1">
+                    <i class="fa-solid fa-gauge-high"></i> 切断面 p (圧力):
+                </span>
+                <input 
+                    type="range" 
+                    id="combined-p-slider" 
+                    min="60" 
+                    max="250" 
+                    value="150" 
+                    oninput="onCombinedSlider()"
+                    class="w-full accent-emerald-400 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                >
+                <span id="combined-p-val" class="text-xs font-mono font-bold text-emerald-300 w-24 text-right shrink-0">1.50×10⁵ Pa</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- =====================================================================
+         右側引き出し式（ドロワー）解説・公式導出パネル
+    ====================================================================== -->
+    <aside id="side-drawer" class="fixed top-14 bottom-3 right-3 w-80 sm:w-[450px] z-30 glass-panel rounded-3xl shadow-2xl flex flex-col transition-transform duration-300 ease-in-out translate-x-[110%]">
+        <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/70 rounded-t-3xl">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-book-open-reader text-emerald-400"></i>
+                <h2 class="font-bold text-sm text-white">資料集のポイント解説と式の成り立ち</h2>
+            </div>
+            <button onclick="toggleDrawer()" class="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition">
+                <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+        </div>
+
+        <div class="p-5 flex-1 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-200">
+            
+            <!-- 1. ボイルの法則の解説 -->
+            <div class="bg-slate-900/90 border border-sky-500/30 p-4 rounded-2xl space-y-2">
+                <h3 class="font-bold text-sky-400 text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-circle-info"></i> 1. ボイルの法則（温度 $T$ が一定のとき）
+                </h3>
+                <p class="text-[11px] text-slate-300">
+                    温度一定のとき、一定量の気体の体積 $V$ は圧力 $p$ に<strong>反比例</strong>します（$pV = k = \text{一定}$、または $p_1V_1 = p_2V_2$）。
+                </p>
+                <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-[11px] space-y-1">
+                    <div class="font-bold text-amber-300">● なぜ高温の曲線ほど外側（右上）にあるのか？</div>
+                    <p class="text-slate-300">
+                        同じ体積 $V$ で比べたとき、<strong>高温になるほど気体分子の熱運動が激しくなり、壁に衝突する力と回数が増えるため圧力 $p$ が大きくなる</strong>からです（結果として積 $pV$ の定数 $k$ が大きくなります）。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 2. シャルルの法則と絶対温度の解説 -->
+            <div class="bg-slate-900/90 border border-rose-500/30 p-4 rounded-2xl space-y-2">
+                <h3 class="font-bold text-rose-400 text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-temperature-low"></i> 2. シャルルの法則と絶対零度（圧力 $p$ が一定のとき）
+                </h3>
+                <p class="text-[11px] text-slate-300">
+                    圧力一定のとき、すべての気体は温度が $1\text{ ℃}$ 上昇するごとに、$0\text{ ℃}$ のときの体積 $V_0$ の $\frac{1}{273}$ ずつ膨張します。
+                </p>
+                <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-mono text-[11px] text-sky-300">
+                    V ＝ V₀ × (1 ＋ t / 273) ＝ V₀ × (273 ＋ t) / 273
+                </div>
+                <p class="text-[11px] text-slate-300">
+                    ここで $T = 273 + t\text{ [K]}$（絶対温度）とおくと、$t = -273\text{ ℃}$ が $T = 0\text{ K}$（絶対零度）となり、<strong>体積 $V$ は絶対温度 $T$ に正比例する原点を通る直線</strong>（$\frac{V}{T} = k$）になります。<br>
+                    また、同じ温度 $T$ で比べると、<strong>低圧の方が気体が膨張して体積 $V$ が大きくなるため、$V$-$T$ グラフの直線の傾きは「低圧ほど大きく（急に）」</strong>なります。
+                </p>
+            </div>
+
+            <!-- 3. ボイル・シャルルの法則（3D曲面と切断の意味） -->
+            <div class="bg-slate-900/90 border border-amber-500/30 p-4 rounded-2xl space-y-2">
+                <h3 class="font-bold text-amber-400 text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-cube"></i> 3. ボイル・シャルルの法則と3D空間曲面
+                </h3>
+                <p class="text-[11px] text-slate-300">
+                    一定量の気体の状態 $(p, V, T)$ は、3次元空間内で $\frac{pV}{T} = k$ を満たす<strong>1枚の滑らかな曲面</strong>の上だけを動きます。
+                </p>
+                <ul class="list-disc list-inside text-[11px] text-slate-300 space-y-1">
+                    <li>この曲面を<strong>「温度 $T$ が一定の平面」でスパッと切断</strong>すると、切り口として<strong>ボイルの法則の反比例曲線（$pV=\text{一定}$）</strong>が現れます。</li>
+                    <li>この曲面を<strong>「圧力 $p$ が一定の平面」でスパッと切断</strong>すると、切り口として<strong>シャルルの法則の比例直線（$V/T=\text{一定}$）</strong>が現れます。</li>
+                </ul>
+            </div>
+        </div>
+    </aside>
+
+    <!-- =====================================================================
+         メインスクリプト：2D実験・分子エンジン ＆ Three.js 3D曲面切断エンジン
+    ====================================================================== -->
+    <script>
+        /**
+         * グローバル状態管理
+         */
+        let currentMode = 'boyle'; // 'boyle' | 'charles' | 'combined'
+
+        // --- モード1：ボイルの法則 状態 ---
+        // 資料集の実験値: p = 1.0 -> V = 40.0, p = 1.2 -> V = 33.3, p = 1.5 -> V = 26.7 (pV = 40.0 * 10^5 Pa・mL = 4.0 * 10^6 Pa・mL)
+        let boyleP = 1.20;               // [×10^5 Pa] (0.60 〜 2.50)
+        let boyleTempLevel = 'mid';      // 'low' (k=28) | 'mid' (k=40) | 'high' (k=54)
+        let boyleGraphType = 'V_p';      // 'V_p' | 'V_invP' | 'pV_p'
+        let showCompareCurves = true;
+
+        // --- モード2：シャルルの法則 状態 ---
+        // 資料集の実験値: t = 0℃(273K) -> V = 2.27mL(表示2.3), t = 40℃(313K) -> V = 2.60mL, t = 80℃(353K) -> V = 2.93mL(表示2.9)
+        // 基準 k_charles = 2.60 / 313 = 0.0083067 [mL/K]
+        let charlesTCelsius = 40.0;      // [℃] (-273 〜 180)
+        let charlesPressLevel = 'mid';   // 'low' (傾き1.35倍) | 'mid' (基準0.008307) | 'high' (傾き0.68倍)
+
+        // --- モード3：ボイル・シャルルの法則 (3D) 状態 ---
+        // 基準定数 k_3d = (p * V) / T = (1.0 * 40.0) / 300 = 0.13333 [×10^5 Pa・mL / K]
+        const K_3D = 40.0 / 300.0;
+        let state1 = { p: 1.00, V: 40.0, T: 300 };
+        let combinedT = 300;             // [K] (150 〜 500)
+        let combinedP = 1.50;            // [×10^5 Pa] (0.60 〜 2.50)
+        let showSliceT = true;
+        let showSliceP = true;
+        let show3DAuxLines = true;       // 3D補助線・垂線・投影点の表示
+        let show3DMeshLines = true;      // 3D曲面上の等温・等圧メッシュ線の表示
+        let is3DOrtho = false;           // 平行投影（2Dグラフ完全一致用）フラグ
+        let state2FloatingReadoutSprite = null; // 3D空間内の現在点(p,V,T)数値バッジ
+
+        // --- 自動状態変化（オートアニメーション）管理 ---
+        let autoPlayMode = 0;            // 0: 停止, 1: 順再生, -1: 逆再生, 2: 往復ループ
+        let autoLoopDir = 1;             // 往復時の現在向き (+1 or -1)
+        let autoSpeed = 0.5;             // デフォルトは 0.5x (ゆっくり)
+        let anim3DPattern = 'boyle';     // 'boyle' (T一定でp変化) | 'charles' (p一定でT変化) | 'both' (p・T同時変化)
+        let anim3DPhase = 0.35;          // 0.0 〜 1.0
+
+        // カメラ滑らか補間ターゲット
+        let camAnimActive = false;
+        let camTargetPos = new THREE.Vector3(16, 12.5, 17.5);
+        let camTargetLook = new THREE.Vector3(5, 4.8, -5);
+
+        // 2D Canvas コンテキスト
+        const sim2dCanvas = document.getElementById('sim2d-canvas');
+        const sim2dCtx = sim2dCanvas.getContext('2d');
+        const graph2dCanvas = document.getElementById('graph2d-canvas');
+        const graph2dCtx = graph2dCanvas.getContext('2d');
+        const slice2dCanvas = document.getElementById('slice2d-canvas');
+        const slice2dCtx = slice2dCanvas.getContext('2d');
+        const miniCyl3dCanvas = document.getElementById('mini-cyl-3d');
+        const miniCyl3dCtx = miniCyl3dCanvas ? miniCyl3dCanvas.getContext('2d') : null;
+
+        // 気体分子の運動用パーティクル配列と壁衝突エフェクト配列の初期化
+        const gasParticles = [];
+        const wallFlashEffects = [];
+        for (let i = 0; i < 24; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            gasParticles.push({
+                rx: 0.1 + Math.random() * 0.8,
+                ry: 0.1 + Math.random() * 0.8,
+                vx: Math.cos(angle),
+                vy: Math.sin(angle)
+            });
+        }
+
+        // ボイル定数 k (= pV) の取得
+        function getBoyleK(level = boyleTempLevel) {
+            if (level === 'low') return 26.0;
+            if (level === 'high') return 56.0;
+            return 40.0; // 資料集の実験値: 4.0 × 10^6 Pa・mL (= 40.0 × 10^5 Pa・mL)
+        }
+
+        // シャルル比例定数 k (= V / T) の取得
+        function getCharlesK(level = charlesPressLevel) {
+            const baseK = 2.60 / 313.0; // 0.0083067 mL/K
+            if (level === 'low') return baseK * 1.38;  // 低圧ほど体積が大きく傾きが急
+            if (level === 'high') return baseK * 0.65; // 高圧ほど体積が小さく傾きが緩やか
+            return baseK;
+        }
+
+        // =====================================================================
+        // 左側：注射器・ピストン・恒温槽の2D物理シミュレーション描画
+        // =====================================================================
+        function draw2DSimulation() {
+            const w = sim2dCanvas.width;
+            const h = sim2dCanvas.height;
+            const ctx = sim2dCtx;
+            ctx.clearRect(0, 0, w, h);
+
+            if (currentMode === 'boyle') {
+                drawBoyleSyringeScene(ctx, w, h);
+            } else if (currentMode === 'charles') {
+                drawCharlesWaterBathScene(ctx, w, h);
+            }
+        }
+
+        // 1. ボイルの法則：資料集の注射器＋おもり圧縮実験＋分子運動拡大ルーペ
+        function drawBoyleSyringeScene(ctx, w, h) {
+            const k = getBoyleK();
+            const V = k / boyleP; // mL (約 16 〜 66 mL)
+            const tempFactor = boyleTempLevel === 'high' ? 1.35 : (boyleTempLevel === 'low' ? 0.72 : 1.0);
+
+            const cylW = Math.min(w * 0.46, 175);
+            const cylH = Math.min(h * 0.68, 250);
+            const cylX = w * 0.5 - cylW / 2;
+            const bottomY = h - 34;
+            const topY = bottomY - cylH;
+
+            // 体積 V (0 〜 70 mL) をシリンダー内の高さにマッピング
+            const maxVolScale = 70.0;
+            const gasH = Math.max(24, Math.min(cylH - 22, (V / maxVolScale) * (cylH - 22)));
+            const pistonBottomY = bottomY - gasH;
+            const pistonThick = 16;
+
+            // 気体空間背景
+            const bgGrad = ctx.createLinearGradient(cylX, pistonBottomY, cylX, bottomY);
+            bgGrad.addColorStop(0, 'rgba(56, 189, 248, 0.16)');
+            bgGrad.addColorStop(1, 'rgba(14, 165, 233, 0.28)');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(cylX + 3, pistonBottomY, cylW - 6, gasH);
+
+            // 注射器の目盛り（10mL, 20mL, 30mL, 40mL, 50mL, 60mL）
+            ctx.font = '10px "Inter", sans-serif';
+            ctx.fillStyle = '#94a3b8';
+            ctx.textAlign = 'right';
+            [10, 20, 30, 40, 50, 60].forEach(ml => {
+                const my = bottomY - (ml / maxVolScale) * (cylH - 22);
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cylX + 3, my);
+                ctx.lineTo(cylX + 16, my);
+                ctx.stroke();
+                ctx.fillText(`${ml} mL`, cylX - 6, my + 3);
+            });
+
+            // 気体分子の運動と壁への衝突エフェクト（容器内クリッピング）
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(cylX + 3, pistonBottomY, cylW - 6, gasH);
+            ctx.clip();
+
+            const speedScale = 1.65 * tempFactor;
+            updateAndRenderGasMolecules(ctx, cylX + 3, pistonBottomY, cylW - 6, gasH, speedScale, '#38bdf8');
+            ctx.restore();
+
+            // ピストンヘッドとロッド
+            const pGrad = ctx.createLinearGradient(cylX, pistonBottomY - pistonThick, cylX + cylW, pistonBottomY);
+            pGrad.addColorStop(0, '#64748b');
+            pGrad.addColorStop(0.5, '#e2e8f0');
+            pGrad.addColorStop(1, '#475569');
+            ctx.fillStyle = pGrad;
+            ctx.fillRect(cylX + 3, pistonBottomY - pistonThick, cylW - 6, pistonThick);
+
+            // ピストン上部の台座とおもり（圧力 boyleP に応じておもりの枚数が変化）
+            const plateY = Math.max(28, pistonBottomY - pistonThick - 22);
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(cylX + cylW / 2 - 7, plateY, 14, pistonBottomY - pistonThick - plateY);
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(cylX + 12, plateY - 7, cylW - 24, 7);
+
+            // おもりの描画（大気圧 1.0×10^5 Pa ＋ 追加おもり）
+            const extraWeights = Math.max(0, Math.round((boyleP - 1.0) * 6));
+            for (let i = 0; i < extraWeights; i++) {
+                const wy = plateY - 7 - (i + 1) * 9;
+                if (wy < 6) break;
+                ctx.fillStyle = '#334155';
+                ctx.strokeStyle = '#94a3b8';
+                ctx.lineWidth = 1;
+                ctx.fillRect(cylX + 24, wy, cylW - 48, 8);
+                ctx.strokeRect(cylX + 24, wy, cylW - 48, 8);
+            }
+
+            // 圧力を示す赤い下向き矢印（資料集のピストン図と同じ表現）
+            const numArrows = boyleP >= 1.45 ? 3 : (boyleP >= 1.15 ? 2 : 1);
+            for (let i = 1; i <= numArrows; i++) {
+                const ax = cylX + (cylW / (numArrows + 1)) * i;
+                drawDownForceArrow(ctx, ax, pistonBottomY - 2, '#f43f5e');
+            }
+
+            // シリンダー外壁
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 3.5;
+            ctx.beginPath();
+            ctx.moveTo(cylX, topY);
+            ctx.lineTo(cylX, bottomY);
+            ctx.lineTo(cylX + cylW, bottomY);
+            ctx.lineTo(cylX + cylW, topY);
+            ctx.stroke();
+
+            // 下部リアルタイム数値バッジ
+            ctx.font = 'bold 12px "Inter", "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#38bdf8';
+            ctx.textAlign = 'center';
+            ctx.fillText(`圧力 p = ${boyleP.toFixed(2)}×10⁵ Pa  ｜  体積 V = ${V.toFixed(1)} mL  ｜  積 pV = ${(boyleP * V * 0.1).toFixed(2)}×10⁶ Pa・mL`, w / 2, h - 10);
+
+            // 衝突頻度テキスト更新
+            const colLevel = boyleP > 1.6 ? '非常に高い (高圧)' : (boyleP > 1.1 ? '中程度' : '低い (低圧)');
+            document.getElementById('collision-readout').textContent = `壁への衝突頻度: ${colLevel}`;
+        }
+
+        // 2. シャルルの法則：恒温水槽（ウォーターバス）＋デジタル温度計＋圧力一定シリンダー
+        function drawCharlesWaterBathScene(ctx, w, h) {
+            const T_kelvin = Math.max(0, charlesTCelsius + 273.0);
+            const k = getCharlesK();
+            const V = k * T_kelvin; // mL (0 〜 約3.8 mL)
+
+            // 外側の恒温水槽（ウォーターバス）
+            const bathW = Math.min(w * 0.72, 260);
+            const bathH = Math.min(h * 0.70, 245);
+            const bathX = w * 0.52 - bathW / 2;
+            const bathBottomY = h - 34;
+            const bathTopY = bathBottomY - bathH;
+
+            // 水槽の温度に応じた色（低温＝氷水ブルー、高温＝温水ピンク/オレンジ）
+            const heatRatio = Math.max(0, Math.min(1, (charlesTCelsius + 50) / 180));
+            const bathColor = `rgba(${Math.round(30 + 210 * heatRatio)}, ${Math.round(140 - 60 * heatRatio)}, ${Math.round(230 - 150 * heatRatio)}, 0.18)`;
+            ctx.fillStyle = bathColor;
+            ctx.fillRect(bathX, bathTopY + 18, bathW, bathH - 18);
+
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(bathX, bathTopY);
+            ctx.lineTo(bathX, bathBottomY);
+            ctx.lineTo(bathX + bathW, bathBottomY);
+            ctx.lineTo(bathX + bathW, bathTopY);
+            ctx.stroke();
+
+            // 左側：資料集の写真にあるデジタル温度計パネル
+            const thermX = Math.max(10, bathX - 74);
+            const thermY = bathTopY + 30;
+            ctx.fillStyle = '#1e293b';
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(thermX, thermY, 82, 64, 10);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(thermX + 7, thermY + 8, 68, 30);
+            ctx.font = 'bold 13px "Inter", monospace';
+            ctx.fillStyle = '#38bdf8';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${Math.round(charlesTCelsius)} ℃`, thermX + 41, thermY + 28);
+            ctx.font = 'bold 11px "Inter", monospace';
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillText(`(${Math.round(T_kelvin)} K)`, thermX + 41, thermY + 54);
+
+            // 温度計センサー棒（水槽内へ伸びる）
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(thermX + 82, thermY + 25);
+            ctx.lineTo(bathX + 22, thermY + 25);
+            ctx.lineTo(bathX + 22, bathBottomY - 30);
+            ctx.stroke();
+
+            // 水槽内の気体シリンダー
+            const cylW = Math.min(bathW * 0.56, 140);
+            const cylH = bathH - 28;
+            const cylX = bathX + (bathW - cylW) / 2 + 10;
+            const cylBottomY = bathBottomY - 10;
+            const cylTopY = cylBottomY - cylH;
+
+            // 体積 V (0 〜 4.2 mL) を高さにマッピング
+            const maxVol = 4.2;
+            const gasH = Math.max(4, Math.min(cylH - 20, (V / maxVol) * (cylH - 20)));
+            const pistonBottomY = cylBottomY - gasH;
+
+            // 気体領域の塗り（資料集のシャルルの図に合わせたピンク系のグラデーション）
+            ctx.fillStyle = 'rgba(244, 63, 94, 0.22)';
+            ctx.fillRect(cylX + 3, pistonBottomY, cylW - 6, gasH);
+
+            // 注射器の目盛り (1.0, 2.0, 3.0, 4.0 mL)
+            ctx.font = '10px "Inter", sans-serif';
+            ctx.fillStyle = '#cbd5e1';
+            ctx.textAlign = 'left';
+            [1.0, 2.0, 3.0, 4.0].forEach(ml => {
+                const my = cylBottomY - (ml / maxVol) * (cylH - 20);
+                ctx.strokeStyle = 'rgba(226, 232, 240, 0.45)';
+                ctx.beginPath();
+                ctx.moveTo(cylX + cylW - 14, my);
+                ctx.lineTo(cylX + cylW - 3, my);
+                ctx.stroke();
+                ctx.fillText(`${ml.toFixed(1)}mL`, cylX + cylW + 5, my + 3);
+            });
+
+            // 気体分子の運動（絶対温度 T の平方根に比例して速度が変化！ T=0K で完全停止）
+            if (gasH > 6 && T_kelvin > 0) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(cylX + 3, pistonBottomY, cylW - 6, gasH);
+                ctx.clip();
+                const speedScale = 1.6 * Math.sqrt(T_kelvin / 300.0);
+                updateAndRenderGasMolecules(ctx, cylX + 3, pistonBottomY, cylW - 6, gasH, speedScale, '#fb7185');
+                ctx.restore();
+            }
+
+            // ピストンと一定のおもり（圧力一定）
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillRect(cylX + 3, pistonBottomY - 12, cylW - 6, 12);
+            const numWeights = charlesPressLevel === 'high' ? 3 : (charlesPressLevel === 'low' ? 1 : 2);
+            for (let i = 0; i < numWeights; i++) {
+                ctx.fillStyle = '#475569';
+                ctx.fillRect(cylX + cylW / 2 - 18, pistonBottomY - 21 - i * 8, 36, 7);
+            }
+
+            // シリンダー壁
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(cylX, cylTopY);
+            ctx.lineTo(cylX, cylBottomY);
+            ctx.lineTo(cylX + cylW, cylBottomY);
+            ctx.lineTo(cylX + cylW, cylTopY);
+            ctx.stroke();
+
+            // 下部リアルタイム数値バッジ
+            const ratioVT = T_kelvin > 0 ? (V / T_kelvin).toFixed(4) : '0.0083';
+            ctx.font = 'bold 12px "Inter", "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#fb7185';
+            ctx.textAlign = 'center';
+            ctx.fillText(`温度 t = ${Math.round(charlesTCelsius)}℃ (T = ${Math.round(T_kelvin)} K)  ｜  体積 V = ${V.toFixed(2)} mL  ｜  V/T = ${ratioVT} mL/K`, w / 2, h - 10);
+
+            document.getElementById('collision-readout').textContent = T_kelvin <= 1
+                ? '絶対零度 (0 K)：熱運動停止・理論体積 0'
+                : `外圧 p = 一定 (分子速度 ∝ √T)`;
+        }
+
+        function updateAndRenderGasMolecules(ctx, x, y, w, h, speed, color) {
+            const r = 4.5;
+            gasParticles.forEach(pt => {
+                pt.rx += (pt.vx * speed) / Math.max(30, w);
+                pt.ry += (pt.vy * speed) / Math.max(20, h);
+
+                if (pt.rx <= 0.05) { pt.rx = 0.05; pt.vx = Math.abs(pt.vx); }
+                if (pt.rx >= 0.95) { pt.rx = 0.95; pt.vx = -Math.abs(pt.vx); }
+                if (pt.ry <= 0.06) {
+                    pt.ry = 0.06; pt.vy = Math.abs(pt.vy);
+                    if (Math.random() < 0.35) wallFlashEffects.push({ x: x + pt.rx * w, y: y + 2, alpha: 0.9 });
+                }
+                if (pt.ry >= 0.94) { pt.ry = 0.94; pt.vy = -Math.abs(pt.vy); }
+
+                const px = x + pt.rx * w;
+                const py = y + pt.ry * h;
+
+                // 速度ベクトル尾
+                if (speed > 0.15) {
+                    ctx.strokeStyle = color;
+                    ctx.globalAlpha = 0.45;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(px, py);
+                    ctx.lineTo(px - pt.vx * speed * 4.5, py - pt.vy * speed * 4.5);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1.0;
+                }
+
+                const grad = ctx.createRadialGradient(px - 1.5, py - 1.5, 0.5, px, py, r);
+                grad.addColorStop(0, '#ffffff');
+                grad.addColorStop(0.4, color);
+                grad.addColorStop(1, '#0369a1');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(px, py, r, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // ピストン下面への衝突フラッシュ
+            for (let i = wallFlashEffects.length - 1; i >= 0; i--) {
+                const fl = wallFlashEffects[i];
+                fl.alpha -= 0.08;
+                if (fl.alpha <= 0) { wallFlashEffects.splice(i, 1); continue; }
+                ctx.fillStyle = `rgba(250, 204, 21, ${fl.alpha})`;
+                ctx.beginPath();
+                ctx.arc(fl.x, fl.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawDownForceArrow(ctx, x, bottomTipY, color) {
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(x, bottomTipY - 16);
+            ctx.lineTo(x, bottomTipY - 4);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, bottomTipY);
+            ctx.lineTo(x - 4.5, bottomTipY - 7);
+            ctx.lineTo(x + 4.5, bottomTipY - 7);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // =====================================================================
+        // 右上：2Dグラフ描画（ボイル3種グラフ ＆ シャルル絶対温度/セルシウス2軸グラフ）
+        // =====================================================================
+        function draw2DGraph() {
+            const w = graph2dCanvas.width;
+            const h = graph2dCanvas.height;
+            const ctx = graph2dCtx;
+            ctx.clearRect(0, 0, w, h);
+
+            if (currentMode === 'boyle') {
+                drawBoyleGraph(ctx, w, h);
+            } else if (currentMode === 'charles') {
+                drawCharlesGraph(ctx, w, h);
+            }
+        }
+
+        // 1. ボイルの法則グラフ（V-p 反比例曲線 / V-(1/p) 原点直線 / pV-p 水平直線）
+        function drawBoyleGraph(ctx, w, h) {
+            const padL = 56, padR = 28, padT = 24, padB = 42;
+            const gw = w - padL - padR;
+            const gh = h - padT - padB;
+
+            // グリッド
+            ctx.strokeStyle = 'rgba(51, 65, 85, 0.45)';
+            ctx.lineWidth = 1;
+            for (let i = 1; i <= 4; i++) {
+                const gx = padL + (gw * i) / 5;
+                const gy = padT + (gh * i) / 5;
+                ctx.beginPath(); ctx.moveTo(gx, padT); ctx.lineTo(gx, padT + gh); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + gw, gy); ctx.stroke();
+            }
+
+            // 軸
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(padL, padT - 4);
+            ctx.lineTo(padL, padT + gh);
+            ctx.lineTo(padL + gw + 6, padT + gh);
+            ctx.stroke();
+
+            const k = getBoyleK();
+            const curV = k / boyleP;
+            const curTempK = boyleTempLevel === 'high' ? 420 : (boyleTempLevel === 'low' ? 195 : 300);
+
+            if (boyleGraphType === 'V_p') {
+                // 標準：縦軸 V (0〜75 mL)、横軸 p (0〜2.7 ×10^5 Pa)
+                const toX = (p) => padL + (p / 2.7) * gw;
+                const toY = (V) => padT + (1.0 - V / 75.0) * gh;
+
+                // 比較曲線（低温・高温）
+                if (showCompareCurves) {
+                    drawHyperbolaCurve(ctx, toX, toY, 26.0, 'rgba(56, 189, 248, 0.45)', 1.8, [4, 4], '低温 (195K)');
+                    drawHyperbolaCurve(ctx, toX, toY, 56.0, 'rgba(244, 63, 94, 0.50)', 1.8, [4, 4], '高温 (420K)');
+                }
+
+                // 現在の等温曲線
+                const mainColor = boyleTempLevel === 'high' ? '#f43f5e' : (boyleTempLevel === 'low' ? '#38bdf8' : '#0ea5e9');
+                drawHyperbolaCurve(ctx, toX, toY, k, mainColor, 3.2, [], `現在温度 T=${curTempK}K (pV=一定)`);
+
+                // 資料集の実験3ポイント (1.0->40, 1.2->33.3, 1.5->26.7)
+                if (boyleTempLevel === 'mid') {
+                    [
+                        { p: 1.0, v: 40.0, label: '①(1.0, 40mL)' },
+                        { p: 1.2, v: 33.3, label: '②(1.2, 33mL)' },
+                        { p: 1.5, v: 26.7, label: '③(1.5, 27mL)' }
+                    ].forEach(pt => {
+                        const px = toX(pt.p), py = toY(pt.v);
+                        ctx.fillStyle = '#facc15';
+                        ctx.beginPath(); ctx.arc(px, py, 4.5, 0, Math.PI * 2); ctx.fill();
+                    });
+                }
+
+                // 現在点のガイド破線と面積 pV の塗りつぶし矩形
+                const cx = toX(boyleP), cy = toY(curV);
+
+                ctx.fillStyle = 'rgba(14, 165, 233, 0.14)';
+                ctx.fillRect(padL, cy, cx - padL, padT + gh - cy);
+
+                ctx.save();
+                ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.6; ctx.setLineDash([4, 3]);
+                ctx.beginPath();
+                ctx.moveTo(padL, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, padT + gh);
+                ctx.stroke();
+                ctx.restore();
+
+                // 軸上の現在値ハイライトタグ（縦軸にV、横軸にpを明示）
+                drawAxisValuePill(ctx, padL - 4, cy, `${curV.toFixed(1)}`, '#10b981', 'right');
+                drawAxisValuePill(ctx, cx, padT + gh + 14, `${boyleP.toFixed(2)}`, '#f43f5e', 'center');
+
+                // マーカーと現在値コールアウト
+                drawActivePointMarker(ctx, cx, cy, '#f43f5e');
+                drawGraphPointCallout(ctx, cx, cy, `p = ${boyleP.toFixed(2)}×10⁵ Pa`, `V = ${curV.toFixed(1)} mL`, w, padL, padT);
+
+                // 軸ラベル
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = 'bold 12px "Noto Sans JP", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('圧力 p [×10⁵ Pa]', padL + gw / 2, padT + gh + 35);
+                ctx.fillText('体積 V [mL]', padL - 24, padT + 8);
+
+                ctx.font = 'bold 10.5px "Inter", sans-serif';
+                ctx.fillStyle = '#94a3b8';
+                [0, 0.5, 1.0, 1.5, 2.0, 2.5].forEach(p => {
+                    ctx.fillText(p.toFixed(1), toX(p), padT + gh + 15);
+                });
+                ctx.textAlign = 'right';
+                [20, 40, 60].forEach(v => {
+                    ctx.fillText(`${v}`, padL - 8, toY(v) + 4);
+                });
+
+            } else if (boyleGraphType === 'V_invP') {
+                // V と 1/p の関係（原点を通る比例直線！）
+                const maxInvP = 1.8; // 1/p [10^-5 Pa^-1]
+                const toX = (invP) => padL + (invP / maxInvP) * gw;
+                const toY = (V) => padT + (1.0 - V / 75.0) * gh;
+
+                if (showCompareCurves) {
+                    ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 1.8;
+                    ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+                    ctx.beginPath(); ctx.moveTo(toX(0), toY(0)); ctx.lineTo(toX(1.6), toY(26.0 * 1.6)); ctx.stroke();
+                    ctx.strokeStyle = 'rgba(244, 63, 94, 0.50)';
+                    ctx.beginPath(); ctx.moveTo(toX(0), toY(0)); ctx.lineTo(toX(1.3), toY(56.0 * 1.3)); ctx.stroke();
+                    ctx.restore();
+                }
+
+                ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 3.2;
+                ctx.beginPath();
+                ctx.moveTo(toX(0), toY(0));
+                ctx.lineTo(toX(1.65), toY(k * 1.65));
+                ctx.stroke();
+
+                const invP = 1.0 / boyleP;
+                const cx = toX(invP), cy = toY(curV);
+                ctx.save();
+                ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+                ctx.beginPath(); ctx.moveTo(padL, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, padT + gh); ctx.stroke();
+                ctx.restore();
+
+                drawAxisValuePill(ctx, padL - 4, cy, `${curV.toFixed(1)}`, '#10b981', 'right');
+                drawAxisValuePill(ctx, cx, padT + gh + 14, `${invP.toFixed(2)}`, '#38bdf8', 'center');
+                drawActivePointMarker(ctx, cx, cy, '#f43f5e');
+                drawGraphPointCallout(ctx, cx, cy, `1/p = ${invP.toFixed(2)} (p=${boyleP.toFixed(2)})`, `V = ${curV.toFixed(1)} mL`, w, padL, padT);
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = 'bold 12px "Noto Sans JP", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('圧力の逆数 1/p [×10⁻⁵ /Pa] （原点を通る比例直線）', padL + gw / 2, padT + gh + 34);
+                ctx.fillText('体積 V [mL]', padL - 24, padT + 8);
+
+            } else {
+                // pV と p の関係（圧力pを変えても積pVは水平で一定！）
+                const toX = (p) => padL + (p / 2.7) * gw;
+                const toY = (pv) => padT + (1.0 - pv / 70.0) * gh;
+
+                if (showCompareCurves) {
+                    ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 1.8;
+                    ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+                    ctx.beginPath(); ctx.moveTo(padL, toY(26)); ctx.lineTo(padL + gw, toY(26)); ctx.stroke();
+                    ctx.strokeStyle = 'rgba(244, 63, 94, 0.50)';
+                    ctx.beginPath(); ctx.moveTo(padL, toY(56)); ctx.lineTo(padL + gw, toY(56)); ctx.stroke();
+                    ctx.restore();
+                }
+
+                ctx.strokeStyle = '#10b981'; ctx.lineWidth = 3.2;
+                ctx.beginPath();
+                ctx.moveTo(padL, toY(k));
+                ctx.lineTo(padL + gw, toY(k));
+                ctx.stroke();
+
+                const cx = toX(boyleP), cy = toY(k);
+                drawAxisValuePill(ctx, cx, padT + gh + 14, `${boyleP.toFixed(2)}`, '#f43f5e', 'center');
+                drawActivePointMarker(ctx, cx, cy, '#f43f5e');
+                drawGraphPointCallout(ctx, cx, cy, `p = ${boyleP.toFixed(2)}×10⁵ Pa`, `pV = ${(k * 0.1).toFixed(2)}×10⁶ Pa・mL`, w, padL, padT);
+
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = 'bold 12px "Noto Sans JP", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('圧力 p [×10⁵ Pa] （pが変わっても積 pV は水平で一定！）', padL + gw / 2, padT + gh + 34);
+                ctx.fillText('積 pV', padL - 24, padT + 8);
+            }
+
+            // グラフ右上：圧力・体積・温度の大型デジタルHUDボックス
+            drawGraphHUD(ctx, w - padR - 195, padT + 6, [
+                { label: '圧力 p', val: `${boyleP.toFixed(2)} ×10⁵ Pa`, color: '#fb7185' },
+                { label: '体積 V', val: `${curV.toFixed(1)} mL`, color: '#34d399' },
+                { label: '温度 T', val: `${curTempK} K (一定)`, color: '#38bdf8' }
+            ]);
+        }
+
+        function drawHyperbolaCurve(ctx, toX, toY, k, color, width, dash, label) {
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.setLineDash(dash);
+            ctx.beginPath();
+            let started = false;
+            for (let p = 0.45; p <= 2.60; p += 0.03) {
+                const v = k / p;
+                if (v > 73) continue;
+                const px = toX(p), py = toY(v);
+                if (!started) { ctx.moveTo(px, py); started = true; }
+                else { ctx.lineTo(px, py); }
+            }
+            ctx.stroke();
+            ctx.font = 'bold 10.5px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = color;
+            ctx.textAlign = 'left';
+            ctx.fillText(label, toX(2.15), toY(k / 2.15) - 7);
+            ctx.restore();
+        }
+
+        // 2. シャルルの法則グラフ（資料集と同じく -273℃〜180℃ / 0K〜453K の2段横軸＋低圧・高圧比較直線）
+        function drawCharlesGraph(ctx, w, h) {
+            const padL = 56, padR = 28, padT = 22, padB = 54;
+            const gw = w - padL - padR;
+            const gh = h - padT - padB;
+
+            const maxK = 460.0; // 0 K (-273℃) 〜 460 K (187℃)
+            const maxV = 4.5;   // 0 〜 4.5 mL
+            const toX = (T_k) => padL + (T_k / maxK) * gw;
+            const toY = (V) => padT + (1.0 - V / maxV) * gh;
+
+            // グリッドと 0℃ (273K) の縦軸破線
+            ctx.strokeStyle = 'rgba(51, 65, 85, 0.45)';
+            ctx.lineWidth = 1;
+            [100, 200, 273, 313, 353, 400].forEach(tk => {
+                const gx = toX(tk);
+                ctx.beginPath(); ctx.moveTo(gx, padT); ctx.lineTo(gx, padT + gh); ctx.stroke();
+            });
+
+            // 0℃ (273K) の基準縦線（資料集のグラフ表現）
+            const x0C = toX(273);
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.7)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(x0C, padT); ctx.lineTo(x0C, padT + gh); ctx.stroke();
+
+            // 外枠座標軸（左端＝絶対零度 0 K = -273℃）
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(padL, padT - 4);
+            ctx.lineTo(padL, padT + gh);
+            ctx.lineTo(padL + gw + 6, padT + gh);
+            ctx.stroke();
+
+            // 低圧・高圧の比較直線
+            if (showCompareCurves) {
+                drawCharlesLine(ctx, toX, toY, getCharlesK('low'), 'rgba(56, 189, 248, 0.55)', 1.8, '低圧 (傾き大)');
+                drawCharlesLine(ctx, toX, toY, getCharlesK('high'), 'rgba(251, 191, 36, 0.55)', 1.8, '高圧 (傾き小)');
+            }
+
+            // 現在の圧力でのシャルル直線（0K〜250Kは外挿破線、250K以上は実線）
+            const k = getCharlesK();
+            drawCharlesLine(ctx, toX, toY, k, '#f43f5e', 3.2, '現在圧力 (V/T = 一定)');
+
+            // 資料集の実験3ポイント (0℃->2.3mL, 40℃->2.6mL, 80℃->2.9mL)
+            if (charlesPressLevel === 'mid') {
+                [273, 313, 353].forEach(tk => {
+                    ctx.fillStyle = '#facc15';
+                    ctx.beginPath(); ctx.arc(toX(tk), toY(k * tk), 4, 0, Math.PI * 2); ctx.fill();
+                });
+            }
+
+            // 現在温度マーカー
+            const curTK = Math.max(0, charlesTCelsius + 273.0);
+            const curV = k * curTK;
+            const curPVal = charlesPressLevel === 'high' ? '1.50' : (charlesPressLevel === 'low' ? '0.72' : '1.00');
+            const cx = toX(curTK), cy = toY(curV);
+
+            ctx.save();
+            ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.6; ctx.setLineDash([4, 3]);
+            ctx.beginPath(); ctx.moveTo(padL, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, padT + gh); ctx.stroke();
+            ctx.restore();
+
+            // 縦軸目盛り (1.0, 2.0, 3.0, 4.0 mL)
+            ctx.font = 'bold 10.5px "Inter", sans-serif';
+            ctx.fillStyle = '#94a3b8';
+            ctx.textAlign = 'right';
+            [1.0, 2.0, 3.0, 4.0].forEach(v => {
+                ctx.fillText(v.toFixed(1), padL - 8, toY(v) + 4);
+            });
+
+            // 軸上の現在値ハイライトタグ
+            drawAxisValuePill(ctx, padL - 4, cy, `${curV.toFixed(2)}`, '#10b981', 'right');
+            drawAxisValuePill(ctx, cx, padT + gh + 14, `${Math.round(curTK)}K`, '#38bdf8', 'center');
+
+            drawActivePointMarker(ctx, cx, cy, '#f43f5e');
+            drawGraphPointCallout(ctx, cx, cy, `T = ${Math.round(curTK)} K (${Math.round(charlesTCelsius)}℃)`, `V = ${curV.toFixed(2)} mL`, w, padL, padT);
+
+            // 2段横軸目盛り（上段：絶対温度 T [K]、下段：セルシウス温度 t [℃]）
+            ctx.font = 'bold 10.5px "Inter", "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'center';
+            [
+                { tk: 0, tc: -273 },
+                { tk: 173, tc: -100 },
+                { tk: 273, tc: 0 },
+                { tk: 313, tc: 40 },
+                { tk: 353, tc: 80 },
+                { tk: 423, tc: 150 }
+            ].forEach(m => {
+                const mx = toX(m.tk);
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillText(`${m.tk}K`, mx, padT + gh + 15);
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText(`(${m.tc}℃)`, mx, padT + gh + 30);
+            });
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 11.5px "Noto Sans JP", sans-serif';
+            ctx.fillText('絶対温度 T [K]  （カッコ内はセルシウス温度 t [℃]）', padL + gw / 2, padT + gh + 47);
+            ctx.fillText('体積 V [mL]', padL - 24, padT + 8);
+
+            // グラフ左上：温度・体積・圧力の大型デジタルHUDボックス
+            drawGraphHUD(ctx, padL + 12, padT + 8, [
+                { label: '温度 T', val: `${Math.round(curTK)} K (${Math.round(charlesTCelsius)}℃)`, color: '#38bdf8' },
+                { label: '体積 V', val: `${curV.toFixed(2)} mL`, color: '#34d399' },
+                { label: '圧力 p', val: `${curPVal} ×10⁵ Pa (一定)`, color: '#fb7185' }
+            ]);
+        }
+
+        function drawCharlesLine(ctx, toX, toY, k, color, width, label) {
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+
+            // 低温域 (0K 〜 240K) は資料集と同じく破線（外挿線）
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(toX(0), toY(0));
+            ctx.lineTo(toX(240), toY(k * 240));
+            ctx.stroke();
+
+            // 常温域 (240K 〜 440K) は実線
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(toX(240), toY(k * 240));
+            const endT = Math.min(445, 4.3 / k);
+            ctx.lineTo(toX(endT), toY(k * endT));
+            ctx.stroke();
+
+            ctx.font = 'bold 10.5px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = color;
+            ctx.textAlign = 'left';
+            ctx.fillText(label, toX(endT - 85), toY(k * (endT - 85)) - 8);
+            ctx.restore();
+        }
+
+        function drawActivePointMarker(ctx, x, y, color) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(244, 63, 94, 0.25)';
+            ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = color;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath(); ctx.arc(x, y, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.restore();
+        }
+
+        // グラフ上の移動マーカー横に現在の (p, V, T) 数値をくっきり表示するコールアウトバッジ
+        function drawGraphPointCallout(ctx, cx, cy, line1, line2, canvasW, padL, padT) {
+            ctx.save();
+            ctx.font = 'bold 11px "Inter", "Noto Sans JP", monospace';
+            const w1 = ctx.measureText(line1).width;
+            const w2 = ctx.measureText(line2).width;
+            const boxW = Math.max(w1, w2) + 18;
+            const boxH = 38;
+
+            let bx = cx + 14;
+            let by = cy - boxH - 8;
+            if (bx + boxW > canvasW - 12) bx = cx - boxW - 14;
+            if (by < padT + 4) by = cy + 12;
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.roundRect(bx, by, boxW, boxH, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#fde047';
+            ctx.fillText(line1, bx + 9, by + 15);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText(line2, bx + 9, by + 31);
+            ctx.restore();
+        }
+
+        // 座標軸上の現在値ハイライトピル（今どの目盛りを指しているか一目でわかるタグ）
+        function drawAxisValuePill(ctx, x, y, text, bgColor, align = 'center') {
+            ctx.save();
+            ctx.font = 'bold 10.5px "Inter", monospace';
+            const tw = ctx.measureText(text).width;
+            const pw = tw + 10;
+            const ph = 17;
+            let rx = x - pw / 2;
+            let ry = y - ph / 2;
+            if (align === 'right') rx = x - pw;
+
+            ctx.fillStyle = bgColor;
+            ctx.beginPath();
+            ctx.roundRect(rx, ry, pw, ph, 5);
+            ctx.fill();
+
+            ctx.fillStyle = '#0f172a';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, rx + pw / 2, ry + ph / 2 + 0.5);
+            ctx.restore();
+        }
+
+        // グラフ内コーナーに常時表示する p, V, T 数値HUDパネル
+        function drawGraphHUD(ctx, x, y, items) {
+            ctx.save();
+            const boxW = 186;
+            const boxH = items.length * 19 + 12;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.90)';
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.roundRect(x, y, boxW, boxH, 10);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.font = 'bold 11px "Inter", "Noto Sans JP", monospace';
+            items.forEach((it, idx) => {
+                const iy = y + 17 + idx * 19;
+                ctx.textAlign = 'left';
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText(it.label + ':', x + 10, iy);
+                ctx.textAlign = 'right';
+                ctx.fillStyle = it.color;
+                ctx.fillText(it.val, x + boxW - 10, iy);
+            });
+            ctx.restore();
+        }
+
+        // =====================================================================
+        // 右下：資料集の注射器実験データ表と赤矢印計算フローの描画
+        // =====================================================================
+        function renderExperimentPanel() {
+            const panel = document.getElementById('experiment-data-panel');
+
+            if (currentMode === 'boyle') {
+                const k = getBoyleK();
+                const curV = k / boyleP;
+                panel.innerHTML = `
+                    <div class="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+                        <!-- 左：資料集の3つの実験データ表 -->
+                        <div class="w-full sm:w-auto flex-1">
+                            <div class="font-bold text-sky-400 text-[11px] mb-1 flex items-center gap-1.5">
+                                <i class="fa-solid fa-table"></i> 資料集「気体の体積と圧力の関係」実験データと現在の比較
+                            </div>
+                            <div class="grid grid-cols-4 gap-1 text-center font-mono text-[11px] bg-slate-950 p-2 rounded-xl border border-slate-800">
+                                <div class="text-slate-400 font-sans text-left pl-1">項目</div>
+                                <div class="text-slate-300">① 低圧</div>
+                                <div class="text-rose-400 font-bold">② 基準</div>
+                                <div class="text-sky-300 font-bold">● 現在値</div>
+
+                                <div class="text-slate-400 font-sans text-left pl-1">圧力 p</div>
+                                <div>1.0×10⁵</div>
+                                <div class="text-rose-300 font-bold">1.2×10⁵</div>
+                                <div class="text-sky-300 font-bold">${boyleP.toFixed(2)}×10⁵</div>
+
+                                <div class="text-slate-400 font-sans text-left pl-1">体積 V</div>
+                                <div>40 mL</div>
+                                <div class="text-rose-300 font-bold">33 mL</div>
+                                <div class="text-sky-300 font-bold">${curV.toFixed(1)} mL</div>
+
+                                <div class="text-slate-400 font-sans text-left pl-1">積 pV</div>
+                                <div class="text-emerald-400">4.0×10⁶</div>
+                                <div class="text-emerald-400 font-bold">4.0×10⁶</div>
+                                <div class="text-emerald-400 font-bold">${(boyleP * curV * 0.1).toFixed(1)}×10⁶</div>
+                            </div>
+                        </div>
+
+                        <!-- 右：p1V1 = p2V2 計算フロー（資料集の赤矢印図） -->
+                        <div class="w-full sm:w-64 bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-1 font-mono text-[11px]">
+                            <div class="text-[10px] font-sans font-bold text-rose-400">
+                                ▼ ボイルの法則 p₁V₁ ＝ p₂V₂ による体積計算
+                            </div>
+                            <div class="text-slate-300">
+                                V ＝ (p₂ × V₂) ÷ p
+                            </div>
+                            <div class="text-white font-bold">
+                                V ＝ (${(k * 0.1).toFixed(1)}×10⁶ Pa・mL) ÷ (${boyleP.toFixed(2)}×10⁵ Pa)
+                            </div>
+                            <div class="text-sky-400 font-bold text-xs pt-0.5">
+                                ⇒ V ＝ ${curV.toFixed(1)} mL
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (currentMode === 'charles') {
+                const T_k = Math.max(0, charlesTCelsius + 273);
+                const k = getCharlesK();
+                const curV = k * T_k;
+                panel.innerHTML = `
+                    <div class="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+                        <!-- 左：資料集のシャルル実験データ表 -->
+                        <div class="w-full sm:w-auto flex-1">
+                            <div class="font-bold text-rose-400 text-[11px] mb-1 flex items-center gap-1.5">
+                                <i class="fa-solid fa-table"></i> 資料集「気体の体積と温度の関係」実験データと現在の比較
+                            </div>
+                            <div class="grid grid-cols-4 gap-1 text-center font-mono text-[11px] bg-slate-950 p-2 rounded-xl border border-slate-800">
+                                <div class="text-slate-400 font-sans text-left pl-1">項目</div>
+                                <div>① 0℃</div>
+                                <div class="text-rose-400 font-bold">② 40℃(基準)</div>
+                                <div class="text-sky-300 font-bold">● 現在(${Math.round(charlesTCelsius)}℃)</div>
+
+                                <div class="text-slate-400 font-sans text-left pl-1">絶対温度 T</div>
+                                <div>273 K</div>
+                                <div class="text-rose-300 font-bold">313 K</div>
+                                <div class="text-sky-300 font-bold">${Math.round(T_k)} K</div>
+
+                                <div class="text-slate-400 font-sans text-left pl-1">体積 V</div>
+                                <div>2.3 mL</div>
+                                <div class="text-rose-300 font-bold">2.6 mL</div>
+                                <div class="text-sky-300 font-bold">${curV.toFixed(2)} mL</div>
+
+                                <div class="text-slate-400 font-sans text-left pl-1">商 V/T</div>
+                                <div class="text-emerald-400">0.0083</div>
+                                <div class="text-emerald-400 font-bold">0.0083</div>
+                                <div class="text-emerald-400 font-bold">${k.toFixed(4)}</div>
+                            </div>
+                        </div>
+
+                        <!-- 右：V1/T1 = V2/T2 計算フロー -->
+                        <div class="w-full sm:w-64 bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-1 font-mono text-[11px]">
+                            <div class="text-[10px] font-sans font-bold text-rose-400">
+                                ▼ シャルルの法則 V₁/T₁ ＝ V₂/T₂ による計算
+                            </div>
+                            <div class="text-slate-300">
+                                V ＝ V₂ × (T ÷ T₂)
+                            </div>
+                            <div class="text-white font-bold">
+                                V ＝ ${(k * 313).toFixed(2)} mL × (${Math.round(T_k)} K ÷ 313 K)
+                            </div>
+                            <div class="text-rose-400 font-bold text-xs pt-0.5">
+                                ⇒ V ＝ ${curV.toFixed(2)} mL
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // =====================================================================
+        // モード3：Three.js による「ボイル・シャルルの法則 3D空間曲面 (p-V-T) と平面切断」
+        // 資料集 p.109 上部の3つの立体図（曲面・T一定の断面・p一定の断面）を完全3D化
+        // さらに補助線・3軸垂線・見る角度によるボイル/シャルル2Dグラフ完全一致視点を実装
+        // =====================================================================
+        let threeScene, threeCamera, persp3DCamera, ortho3DCamera, threeRenderer, threeControls;
+        let surfaceMesh, surfaceGridGroup, sliceTMesh, slicePMesh, boyleIntersectionLine, charlesIntersectionLine;
+        let auxLinesGroup;
+        let state1Sphere, state2Sphere;
+        let isThreeInitialized = false;
+
+        // 物理量 (p, V, T) から Three.js 3D空間座標 (x, y, z) への変換
+        // 資料集の立体軸配置に完全一致させる：
+        //   X軸 (右方向: 0 〜 10) = 圧力 p (0.5 〜 2.5 ×10^5 Pa)
+        //   Y軸 (上方向: 0 〜 10) = 体積 V (0 〜 75 mL)
+        //   Z軸 (手前 0 〜 奥 -10) = 絶対温度 T (0 K 〜 500 K) ※シャルルの原点0Kが z=0 に来るよう設計！
+        function pToX(p) { return ((p - 0.50) / 2.00) * 10.0; }
+        function vToY(v) { return Math.max(0, Math.min(10.5, (v / 75.0) * 10.0)); }
+        function tToZ(t) { return -((t - 0.0) / 500.0) * 10.0; } // T=0K が z=0 (手前)、T=500K が z=-10 (奥)
+
+        function initThree3DSurface() {
+            if (isThreeInitialized) return;
+            const container = document.getElementById('three-container');
+            const canvas = document.getElementById('three-canvas');
+            const w = container.clientWidth || 640;
+            const h = container.clientHeight || 420;
+            const aspect = w / h;
+
+            threeScene = new THREE.Scene();
+            threeScene.background = new THREE.Color(0x090d16);
+
+            // 1. 透視投影カメラ（立体俯瞰用）
+            persp3DCamera = new THREE.PerspectiveCamera(36, aspect, 0.1, 300);
+            persp3DCamera.position.set(16.5, 12.5, 17.5);
+
+            // 2. 平行投影カメラ（正面から見たときにボイルのV-pグラフ、横から見たときにシャルルのV-Tグラフと歪みなく完全一致させる！）
+            const frustumH = 14.5;
+            ortho3DCamera = new THREE.OrthographicCamera(
+                -frustumH * aspect / 2, frustumH * aspect / 2,
+                frustumH / 2, -frustumH / 2,
+                -100, 200
+            );
+            ortho3DCamera.position.copy(persp3DCamera.position);
+
+            threeCamera = persp3DCamera;
+
+            threeRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            threeRenderer.setSize(w, h);
+            threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            threeControls = new THREE.OrbitControls(threeCamera, threeRenderer.domElement);
+            threeControls.target.set(5, 4.8, -5);
+            threeControls.enableDamping = true;
+            threeControls.dampingFactor = 0.08;
+            threeControls.update();
+
+            // ユーザーがマウスでドラッグ回転を開始したらカメラ自動補間を解除
+            threeControls.addEventListener('start', () => { camAnimActive = false; });
+
+            // 照明
+            threeScene.add(new THREE.AmbientLight(0xffffff, 0.75));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+            dirLight.position.set(18, 28, 22);
+            threeScene.add(dirLight);
+
+            // 1. 立体的な3Dボックスケージ・背面/側面/床面の目盛りグリッド・数値ラベルを構築
+            build3DAxesAndBox();
+
+            // 2. ボイル・シャルルの法則を満たす点 (p, V, T) がつくる3D曲面メッシュ + 等温線/等圧線メッシュ
+            buildPVTSurfaceMesh();
+
+            // 3. 切断平面（T一定の青い面、p一定の緑の面）と交線（ボイル双曲線、シャルル直線）
+            buildCuttingPlanesAndCurves();
+
+            // 4. 奥行き感が一目でわかる3D補助線・垂線グループ
+            auxLinesGroup = new THREE.Group();
+            threeScene.add(auxLinesGroup);
+
+            isThreeInitialized = true;
+            update3DSlicesAndMarkers();
+        }
+
+        // 3D空間の奥行きを明確にする3面グリッド壁（p-V背面、V-T左壁、p-T床面）と目盛り線
+        function build3DAxesAndBox() {
+            // 外枠ワイヤーフレームボックス (10 x 10 x 10)
+            const boxPts = [
+                // 床面四角 (y=0)
+                new THREE.Vector3(0,0,0), new THREE.Vector3(10,0,0),
+                new THREE.Vector3(10,0,0), new THREE.Vector3(10,0,-10),
+                new THREE.Vector3(10,0,-10), new THREE.Vector3(0,0,-10),
+                new THREE.Vector3(0,0,-10), new THREE.Vector3(0,0,0),
+                // 天井四角 (y=10)
+                new THREE.Vector3(0,10,0), new THREE.Vector3(10,10,0),
+                new THREE.Vector3(10,10,0), new THREE.Vector3(10,10,-10),
+                new THREE.Vector3(10,10,-10), new THREE.Vector3(0,10,-10),
+                new THREE.Vector3(0,10,-10), new THREE.Vector3(0,10,0),
+                // 垂直柱4本
+                new THREE.Vector3(0,0,0), new THREE.Vector3(0,10,0),
+                new THREE.Vector3(10,0,0), new THREE.Vector3(10,10,0),
+                new THREE.Vector3(10,0,-10), new THREE.Vector3(10,10,-10),
+                new THREE.Vector3(0,0,-10), new THREE.Vector3(0,10,-10)
+            ];
+            const boxMat = new THREE.LineBasicMaterial({ color: 0x475569 });
+            threeScene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(boxPts), boxMat));
+
+            // 3つの主軸（太く明るい色分け軸）
+            // X軸 (圧力 p): 赤ピンク
+            const xAxisGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(10.6,0,0)]);
+            threeScene.add(new THREE.Line(xAxisGeom, new THREE.LineBasicMaterial({ color: 0xf43f5e, linewidth: 3 })));
+            // Y軸 (体積 V): エメラルド
+            const yAxisGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,10.6,0)]);
+            threeScene.add(new THREE.Line(yAxisGeom, new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 3 })));
+            // Z軸 (絶対温度 T): スカイブルー
+            const zAxisGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-10.6)]);
+            threeScene.add(new THREE.Line(zAxisGeom, new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 3 })));
+
+            // 3面（① 床面 p-T、② 奥壁 p-V [z=-10]、③ 左壁 V-T [x=0]）の補助グリッド線
+            const gridPts = [];
+            for (let i = 2; i <= 10; i += 2) {
+                // ① 床面 (y = 0) グリッド
+                gridPts.push(new THREE.Vector3(i, 0, 0), new THREE.Vector3(i, 0, -10));
+                gridPts.push(new THREE.Vector3(0, 0, -i), new THREE.Vector3(10, 0, -i));
+                // ② 奥壁 (z = -10, p-V ボイル投影面) グリッド
+                gridPts.push(new THREE.Vector3(i, 0, -10), new THREE.Vector3(i, 10, -10));
+                gridPts.push(new THREE.Vector3(0, i, -10), new THREE.Vector3(10, i, -10));
+                // ③ 左壁 (x = 0, V-T シャルル投影面) グリッド
+                gridPts.push(new THREE.Vector3(0, 0, -i), new THREE.Vector3(0, 10, -i));
+                gridPts.push(new THREE.Vector3(0, i, 0), new THREE.Vector3(0, i, -10));
+            }
+            const gridMat = new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.85 });
+            threeScene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(gridPts), gridMat));
+
+            // 軸タイトル＆数値目盛りスプライト
+            add3DTextLabel('圧力 p [×10⁵Pa] →', new THREE.Vector3(5.5, -1.2, 0.6), '#fb7185', 3.6);
+            add3DTextLabel('↑ 体積 V [mL]', new THREE.Vector3(-1.5, 9.5, 0.4), '#34d399', 3.2);
+            add3DTextLabel('絶対温度 T [K] →', new THREE.Vector3(11.4, -1.0, -5.5), '#38bdf8', 3.4);
+
+            // 圧力 p の数値目盛り (1.0, 1.5, 2.0, 2.5)
+            [1.0, 1.5, 2.0, 2.5].forEach(pVal => {
+                add3DTextLabel(`${pVal.toFixed(1)}`, new THREE.Vector3(pToX(pVal), -0.55, 0.3), '#fda4af', 1.85);
+            });
+            // 体積 V の数値目盛り（左端 x=0 と右端 x=10 の両方に配置し、どの角度から見てもVの値が読めるようにする）
+            [15, 30, 45, 60, 75].forEach(vVal => {
+                add3DTextLabel(`${vVal}mL`, new THREE.Vector3(-0.9, vToY(vVal), 0.2), '#6ee7b7', 2.1);
+                add3DTextLabel(`${vVal}mL`, new THREE.Vector3(10.8, vToY(vVal), 0.2), '#6ee7b7', 2.1);
+            });
+            // 絶対温度 T の数値目盛り（手前 0K → 奥 450K：右側面 +X から見たとき左が0K、右が450Kになるよう x=10.8 側にも配置）
+            [0, 150, 300, 450].forEach(tVal => {
+                add3DTextLabel(`${tVal}K`, new THREE.Vector3(-0.9, -0.5, tToZ(tVal)), '#7dd3fc', 2.0);
+                add3DTextLabel(`${tVal}K`, new THREE.Vector3(10.8, -0.5, tToZ(tVal)), '#7dd3fc', 2.0);
+            });
+        }
+
+        function add3DTextLabel(text, pos, color, scaleW = 3.4) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold 28px "Inter", "Noto Sans JP", sans-serif';
+            ctx.fillStyle = color;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 128, 32);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+            const sprite = new THREE.Sprite(mat);
+            sprite.position.copy(pos);
+            sprite.scale.set(scaleW, scaleW * 0.25, 1);
+            threeScene.add(sprite);
+        }
+
+        function buildPVTSurfaceMesh() {
+            // p ∈ [0.60, 2.50], T ∈ [50, 500] のグリッドで V = K_3D * T / p の曲面を生成
+            const segP = 44, segT = 44;
+            const positions = [];
+            const colors = [];
+            const indices = [];
+
+            for (let it = 0; it <= segT; it++) {
+                const T = 40 + (it / segT) * (500 - 40);
+                const z = tToZ(T);
+
+                for (let ip = 0; ip <= segP; ip++) {
+                    const p = 0.60 + (ip / segP) * (2.50 - 0.60);
+                    const V = Math.min(75.0, (K_3D * T) / p);
+                    const x = pToX(p);
+                    const y = vToY(V);
+
+                    positions.push(x, y, z);
+
+                    // 資料集の曲面と同じ温かみのあるピンク〜アンバーのグラデーション（低温側はブルー系）
+                    const tRatio = it / segT;
+                    const c = new THREE.Color().setHSL(0.60 - tRatio * 0.58, 0.78, 0.54);
+                    colors.push(c.r, c.g, c.b);
+                }
+            }
+
+            for (let it = 0; it < segT; it++) {
+                for (let ip = 0; ip < segP; ip++) {
+                    const a = it * (segP + 1) + ip;
+                    const b = a + 1;
+                    const c = (it + 1) * (segP + 1) + ip;
+                    const d = c + 1;
+                    indices.push(a, b, d);
+                    indices.push(a, d, c);
+                }
+            }
+
+            const geom = new THREE.BufferGeometry();
+            geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            geom.setIndex(indices);
+            geom.computeVertexNormals();
+
+            const mat = new THREE.MeshPhysicalMaterial({
+                vertexColors: true,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.62,
+                roughness: 0.28,
+                metalness: 0.05,
+                depthWrite: false
+            });
+
+            surfaceMesh = new THREE.Mesh(geom, mat);
+            threeScene.add(surfaceMesh);
+
+            // ★ 曲面上の「等温線メッシュ（ボイル曲線群）」と「等圧線メッシュ（シャルル直線群）」を描画して立体感を強化
+            surfaceGridGroup = new THREE.Group();
+
+            // ① 曲面上の等温線群 (T = 100, 200, 300, 400, 500 K) -> 正面から見るとボイルの高温・低温の等温線群になる！
+            [100, 200, 300, 400, 500].forEach(tVal => {
+                const pts = [];
+                for (let p = 0.60; p <= 2.50; p += 0.04) {
+                    const v = (K_3D * tVal) / p;
+                    if (v <= 75.0) {
+                        pts.push(new THREE.Vector3(pToX(p), vToY(v), tToZ(tVal)));
+                    }
+                }
+                const lineMat = new THREE.LineBasicMaterial({ color: 0xbae6fd, transparent: true, opacity: 0.55 });
+                surfaceGridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
+            });
+
+            // ② 曲面上の等圧線群 (p = 0.8, 1.0, 1.2, 1.5, 2.0, 2.5 ×10^5 Pa) -> 横から見るとシャルルの低圧・高圧の直線群になる！
+            [0.8, 1.0, 1.2, 1.5, 2.0, 2.5].forEach(pVal => {
+                const pts = [];
+                for (let t = 0; t <= 500; t += 10) {
+                    const v = (K_3D * t) / pVal;
+                    if (v <= 75.0) {
+                        pts.push(new THREE.Vector3(pToX(pVal), vToY(v), tToZ(t)));
+                    }
+                }
+                const lineMat = new THREE.LineBasicMaterial({ color: 0xa7f3d0, transparent: true, opacity: 0.55 });
+                surfaceGridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
+            });
+
+            threeScene.add(surfaceGridGroup);
+        }
+
+        function buildCuttingPlanesAndCurves() {
+            // 1. 温度 T が一定の切断平面（青い半透明プレート）
+            const planeTGeom = new THREE.PlaneGeometry(10, 10);
+            const planeTMat = new THREE.MeshBasicMaterial({
+                color: 0x0ea5e9,
+                transparent: true,
+                opacity: 0.24,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            sliceTMesh = new THREE.Mesh(planeTGeom, planeTMat);
+            threeScene.add(sliceTMesh);
+
+            // 2. 圧力 p が一定の切断平面（エメラルドグリーンの半透明プレート）
+            const planePGeom = new THREE.PlaneGeometry(10, 10);
+            planePGeom.rotateY(Math.PI / 2);
+            const planePMat = new THREE.MeshBasicMaterial({
+                color: 0x10b981,
+                transparent: true,
+                opacity: 0.24,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            slicePMesh = new THREE.Mesh(planePGeom, planePMat);
+            threeScene.add(slicePMesh);
+
+            // 3. 切断交線（ボイル双曲線 & シャルル直線）
+            boyleIntersectionLine = new THREE.Line(
+                new THREE.BufferGeometry(),
+                new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 4 })
+            );
+            charlesIntersectionLine = new THREE.Line(
+                new THREE.BufferGeometry(),
+                new THREE.LineBasicMaterial({ color: 0x34d399, linewidth: 4 })
+            );
+            threeScene.add(boyleIntersectionLine, charlesIntersectionLine);
+
+            // 4. 状態1 (p1, V1, T1) と 状態2 (p2, V2, T2) の3D球体マーカー
+            const sphereGeom = new THREE.SphereGeometry(0.32, 24, 24);
+            state1Sphere = new THREE.Mesh(sphereGeom, new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0x443300 }));
+            state2Sphere = new THREE.Mesh(sphereGeom, new THREE.MeshStandardMaterial({ color: 0xf43f5e, emissive: 0x550011 }));
+            threeScene.add(state1Sphere, state2Sphere);
+
+            // 5. 3D空間の赤い球（状態2）の直上に常時追従する (p, V, T) 数値フローティングラベル
+            const canvas = document.createElement('canvas');
+            canvas.width = 384; canvas.height = 112;
+            const tex = new THREE.CanvasTexture(canvas);
+            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+            state2FloatingReadoutSprite = new THREE.Sprite(mat);
+            state2FloatingReadoutSprite.scale.set(4.8, 1.4, 1);
+            state2FloatingReadoutSprite.userData = { canvas, tex };
+            threeScene.add(state2FloatingReadoutSprite);
+        }
+
+        function update3DFloatingReadoutSprite(p, V, T, pos) {
+            if (!state2FloatingReadoutSprite) return;
+            const { canvas, tex } = state2FloatingReadoutSprite.userData;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 半透明ダークカード＋黄色枠線
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.roundRect(6, 6, canvas.width - 12, canvas.height - 12, 18);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.font = 'bold 25px "Inter", "Noto Sans JP", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#fde047';
+            ctx.fillText(`p=${p.toFixed(2)}×10⁵Pa | T=${Math.round(T)}K`, canvas.width / 2, 40);
+            ctx.font = 'bold 28px "Inter", "Noto Sans JP", monospace';
+            ctx.fillStyle = '#34d399';
+            ctx.fillText(`体積 V = ${V.toFixed(1)} mL`, canvas.width / 2, 80);
+
+            tex.needsUpdate = true;
+            state2FloatingReadoutSprite.position.set(pos.x, Math.min(9.6, pos.y + 1.25), pos.z);
+        }
+
+        // ★ 現在の状態点 (p, V, T) から3つの座標面・各軸へ下ろした立体補助線（垂線・投影点・直方体ガイド）を更新
+        function rebuild3DAuxiliaryLines(xP, yV, zT) {
+            if (!auxLinesGroup) return;
+            while (auxLinesGroup.children.length > 0) {
+                const child = auxLinesGroup.children[0];
+                if (child.geometry) child.geometry.dispose();
+                auxLinesGroup.remove(child);
+            }
+            auxLinesGroup.visible = show3DAuxLines;
+            if (!show3DAuxLines) return;
+
+            const P_cur = new THREE.Vector3(xP, yV, zT);
+            const P_floor = new THREE.Vector3(xP, 0, zT);       // 床面 (p-T面) への垂線の足
+            const P_boyleWall = new THREE.Vector3(xP, yV, -10); // 奥壁 (p-V面) への投影点
+            const P_charlesWall = new THREE.Vector3(0, yV, zT); // 左壁 (V-T面) への投影点
+            const P_xAxis = new THREE.Vector3(xP, 0, 0);        // p軸上の目盛り位置
+            const P_yAxis = new THREE.Vector3(0, yV, 0);        // V軸上の目盛り位置
+            const P_zAxis = new THREE.Vector3(0, 0, zT);        // T軸上の目盛り位置
+
+            // 1. 状態点から3方向への主垂線（鮮やかなイエロー破線）
+            const mainDropPts = [
+                P_cur, P_floor,        // 真下の床面(p-T面)へ下ろす垂線 (高さが体積Vを表す)
+                P_cur, P_boyleWall,    // 奥のp-V壁へ伸ばす補助線
+                P_cur, P_charlesWall,  // 左のV-T壁へ伸ばす補助線
+                // 床面上の座標引き出し線 (p軸・T軸へ直交)
+                P_floor, P_xAxis,
+                P_floor, P_zAxis,
+                // 左壁・手前でのV軸への引き出し線
+                P_charlesWall, P_yAxis
+            ];
+            const dashMat = new THREE.LineDashedMaterial({
+                color: 0xfacc15,
+                dashSize: 0.35,
+                gapSize: 0.22,
+                linewidth: 2
+            });
+            const dropLine = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(mainDropPts), dashMat);
+            dropLine.computeLineDistances();
+            auxLinesGroup.add(dropLine);
+
+            // 2. 各投影面（床面・ボイル壁・シャルル壁）上の投影リングマーカー
+            const projGeom = new THREE.SphereGeometry(0.18, 16, 16);
+            // 床面投影点 (p, 0, T)
+            const mFloor = new THREE.Mesh(projGeom, new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+            mFloor.position.copy(P_floor);
+            // ボイル壁投影点 (p, V, -10)
+            const mBoyle = new THREE.Mesh(projGeom, new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+            mBoyle.position.copy(P_boyleWall);
+            // シャルル壁投影点 (0, V, T)
+            const mCharles = new THREE.Mesh(projGeom, new THREE.MeshBasicMaterial({ color: 0x34d399 }));
+            mCharles.position.copy(P_charlesWall);
+
+            auxLinesGroup.add(mFloor, mBoyle, mCharles);
+        }
+
+        function update3DSlicesAndMarkers() {
+            if (!isThreeInitialized) return;
+
+            const zT = tToZ(combinedT);
+            const xP = pToX(combinedP);
+
+            // T一定の切断面位置とボイル双曲線ジオメトリ更新
+            sliceTMesh.visible = showSliceT;
+            boyleIntersectionLine.visible = showSliceT;
+            sliceTMesh.position.set(5, 5, zT);
+
+            const boylePts = [];
+            for (let p = 0.60; p <= 2.50; p += 0.03) {
+                const v = (K_3D * combinedT) / p;
+                if (v <= 75.5) {
+                    boylePts.push(new THREE.Vector3(pToX(p), vToY(v), zT));
+                }
+            }
+            boyleIntersectionLine.geometry.dispose();
+            boyleIntersectionLine.geometry = new THREE.BufferGeometry().setFromPoints(boylePts);
+
+            // p一定の切断面位置とシャルル直線ジオメトリ更新（T=0K の原点から直線が伸びる！）
+            slicePMesh.visible = showSliceP;
+            charlesIntersectionLine.visible = showSliceP;
+            slicePMesh.position.set(xP, 5, -5);
+
+            const charlesPts = [];
+            for (let t = 0; t <= 500; t += 10) {
+                const v = (K_3D * t) / combinedP;
+                if (v <= 75.5) {
+                    charlesPts.push(new THREE.Vector3(xP, vToY(v), tToZ(t)));
+                }
+            }
+            charlesIntersectionLine.geometry.dispose();
+            charlesIntersectionLine.geometry = new THREE.BufferGeometry().setFromPoints(charlesPts);
+
+            // 状態1と状態2（2つの切断面の交点！）の位置更新
+            const curV2 = (K_3D * combinedT) / combinedP;
+            const yV = vToY(curV2);
+            state1Sphere.position.set(pToX(state1.p), vToY(state1.V), tToZ(state1.T));
+            state2Sphere.position.set(xP, yV, zT);
+
+            // 3D球体直上の(p, V, T)フローティング数値ラベルを更新
+            update3DFloatingReadoutSprite(combinedP, curV2, combinedT, state2Sphere.position);
+
+            // 3D補助線・垂線の再構築
+            rebuild3DAuxiliaryLines(xP, yV, zT);
+
+            // 3D画面右下のミニシリンダー＆数値更新
+            if (document.getElementById('mini3d-p')) {
+                document.getElementById('mini3d-p').textContent = combinedP.toFixed(2);
+                document.getElementById('mini3d-v').textContent = curV2.toFixed(1);
+                document.getElementById('mini3d-t').textContent = Math.round(combinedT);
+            }
+
+            // 右側の計算カード更新
+            document.getElementById('st1-p').textContent = state1.p.toFixed(2);
+            document.getElementById('st1-v').textContent = state1.V.toFixed(1);
+            document.getElementById('st1-t').textContent = Math.round(state1.T);
+            document.getElementById('st1-k').textContent = ((state1.p * state1.V) / state1.T * 100).toFixed(1);
+
+            document.getElementById('st2-p').textContent = combinedP.toFixed(2);
+            document.getElementById('st2-v').textContent = curV2.toFixed(1);
+            document.getElementById('st2-t').textContent = Math.round(combinedT);
+            document.getElementById('st2-k').textContent = ((combinedP * curV2) / combinedT * 100).toFixed(1);
+        }
+
+        // 3Dモード右下のミニシリンダー描画（3D上の赤い球の動きに合わせてピストンと分子が動く！）
+        function drawMini3DCylinder() {
+            if (!miniCyl3dCtx || currentMode !== 'combined') return;
+            const ctx = miniCyl3dCtx;
+            const w = miniCyl3dCanvas.width;
+            const h = miniCyl3dCanvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            const curV = (K_3D * combinedT) / combinedP; // mL
+            const cylX = 16, cylW = w - 32;
+            const bottomY = h - 10, topY = 14;
+            const maxH = bottomY - topY;
+            const gasH = Math.max(12, Math.min(maxH - 10, (curV / 75.0) * (maxH - 10)));
+            const pistonY = bottomY - gasH;
+
+            // 温度に応じた背景色
+            const tRatio = Math.max(0, Math.min(1, (combinedT - 150) / 350));
+            ctx.fillStyle = `rgba(${Math.round(40 + 200 * tRatio)}, 140, ${Math.round(240 - 160 * tRatio)}, 0.25)`;
+            ctx.fillRect(cylX + 2, pistonY, cylW - 4, gasH);
+
+            // 分子アニメーション
+            ctx.save();
+            ctx.beginPath(); ctx.rect(cylX + 2, pistonY, cylW - 4, gasH); ctx.clip();
+            const spd = 1.1 * Math.sqrt(combinedT / 300.0);
+            for (let i = 0; i < 12; i++) {
+                const pt = gasParticles[i];
+                pt.rx += (pt.vx * spd) / cylW;
+                pt.ry += (pt.vy * spd) / Math.max(10, gasH);
+                if (pt.rx < 0.08 || pt.rx > 0.92) pt.vx *= -1;
+                if (pt.ry < 0.08 || pt.ry > 0.92) pt.vy *= -1;
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.arc(cylX + 2 + pt.rx * (cylW - 4), pistonY + pt.ry * gasH, 2.6, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+
+            // ピストン
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillRect(cylX + 2, pistonY - 6, cylW - 4, 6);
+            // シリンダー壁
+            ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(cylX, topY); ctx.lineTo(cylX, bottomY); ctx.lineTo(cylX + cylW, bottomY); ctx.lineTo(cylX + cylW, topY);
+            ctx.stroke();
+        }
+
+        // モード3右上：切断面の2D投影グラフ（左半分＝T一定ボイル断面、右半分＝p一定シャルル断面）
+        function draw3DSlice2DGraphs() {
+            if (!slice2dCanvas || currentMode !== 'combined') return;
+            const ctx = slice2dCtx;
+            const w = slice2dCanvas.width;
+            const h = slice2dCanvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            const halfW = w / 2;
+            const padL = 32, padR = 14, padT = 24, padB = 28;
+            const gw = Math.max(40, halfW - padL - padR);
+            const gh = Math.max(40, h - padT - padB);
+            const curV = (K_3D * combinedT) / combinedP;
+
+            // --- 左側：T一定の切断面（ボイルの法則 V-p 反比例曲線） ---
+            const bToX = (p) => padL + ((p - 0.5) / 2.1) * gw;
+            const bToY = (v) => padT + (1.0 - Math.min(75, v) / 75.0) * gh;
+
+            ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + gh); ctx.lineTo(padL + gw, padT + gh);
+            ctx.stroke();
+
+            ctx.font = 'bold 10.5px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#38bdf8'; ctx.textAlign = 'center';
+            ctx.fillText(`T=${combinedT}K 断面 (ボイル V-p)`, padL + gw / 2, 15);
+
+            ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            let started = false;
+            for (let p = 0.60; p <= 2.50; p += 0.04) {
+                const v = (K_3D * combinedT) / p;
+                if (v > 75) continue;
+                const px = bToX(p), py = bToY(v);
+                if (!started) { ctx.moveTo(px, py); started = true; } else { ctx.lineTo(px, py); }
+            }
+            ctx.stroke();
+
+            // 現在点マーカーと垂線
+            const bx = bToX(combinedP), by = bToY(curV);
+            ctx.save();
+            ctx.strokeStyle = '#facc15'; ctx.setLineDash([2, 2]);
+            ctx.beginPath(); ctx.moveTo(padL, by); ctx.lineTo(bx, by); ctx.lineTo(bx, padT + gh); ctx.stroke();
+            ctx.restore();
+            drawActivePointMarker(ctx, bx, by, '#f43f5e');
+
+            // 断面グラフ上に現在の数値 p, V を大きく明示
+            ctx.font = 'bold 10.5px "Inter", monospace';
+            ctx.fillStyle = '#fde047';
+            ctx.textAlign = 'left';
+            ctx.fillText(`p=${combinedP.toFixed(2)}`, padL + 6, padT + gh - 20);
+            ctx.fillStyle = '#34d399';
+            ctx.fillText(`V=${curV.toFixed(1)}mL`, padL + 6, padT + gh - 6);
+
+            ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 9.5px "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('圧力 p [×10⁵Pa] →', padL + gw / 2, padT + gh + 18);
+            ctx.fillText('V', padL - 12, padT + 10);
+
+            // --- 右側：p一定の切断面（シャルルの法則 V-T 原点比例直線：左が0K、右が500K） ---
+            const cOx = halfW + padL;
+            const cToX = (t) => cOx + (t / 500.0) * gw;
+            const cToY = (v) => padT + (1.0 - Math.min(75, v) / 75.0) * gh;
+
+            ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(cOx, padT); ctx.lineTo(cOx, padT + gh); ctx.lineTo(cOx + gw, padT + gh);
+            ctx.stroke();
+
+            ctx.font = 'bold 10.5px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#34d399'; ctx.textAlign = 'center';
+            ctx.fillText(`p=${combinedP.toFixed(2)} 断面 (シャルル V-T)`, cOx + gw / 2, 15);
+
+            ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(cToX(0), cToY(0));
+            const maxT = Math.min(500, (75.0 * combinedP) / K_3D);
+            ctx.lineTo(cToX(maxT), cToY((K_3D * maxT) / combinedP));
+            ctx.stroke();
+
+            // 現在点マーカーと垂線
+            const cx = cToX(combinedT), cy = cToY(curV);
+            ctx.save();
+            ctx.strokeStyle = '#facc15'; ctx.setLineDash([2, 2]);
+            ctx.beginPath(); ctx.moveTo(cOx, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, padT + gh); ctx.stroke();
+            ctx.restore();
+            drawActivePointMarker(ctx, cx, cy, '#f43f5e');
+
+            // 断面グラフ上に現在の数値 T, V を大きく明示
+            ctx.font = 'bold 10.5px "Inter", monospace';
+            ctx.fillStyle = '#38bdf8';
+            ctx.textAlign = 'left';
+            ctx.fillText(`T=${combinedT}K`, cOx + 6, padT + 18);
+            ctx.fillStyle = '#34d399';
+            ctx.fillText(`V=${curV.toFixed(1)}mL`, cOx + 6, padT + 32);
+
+            ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 9.5px "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('0K       絶対温度 T [K] →     500K', cOx + gw / 2, padT + gh + 18);
+            ctx.fillText('V', cOx - 12, padT + 10);
+        }
+
+        // =====================================================================
+        // UIイベント・モード切替・自動再生・3D視点アングル制御
+        // =====================================================================
+        function selectMode(mode) {
+            currentMode = mode;
+            stopAutoPlay();
+
+            // タブ外観
+            const tabs = {
+                'boyle': document.getElementById('tab-boyle'),
+                'charles': document.getElementById('tab-charles'),
+                'combined': document.getElementById('tab-combined')
+            };
+            Object.keys(tabs).forEach(k => {
+                if (k === mode) {
+                    tabs[k].className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-600 text-white shadow flex items-center gap-1.5';
+                } else {
+                    tabs[k].className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white hover:bg-slate-800/70 flex items-center gap-1.5';
+                }
+            });
+
+            // ビューポートと下部コントロールの切り替え
+            const view2d = document.getElementById('view-2d-modes');
+            const view3d = document.getElementById('view-3d-mode');
+            const ctrlBoyle = document.getElementById('controls-boyle');
+            const ctrlCharles = document.getElementById('controls-charles');
+            const ctrlCombined = document.getElementById('controls-combined');
+            const bgSwitch = document.getElementById('boyle-graph-switcher');
+            const camPresets = document.getElementById('combined-camera-presets');
+            const animPat = document.getElementById('combined-anim-pattern');
+
+            if (mode === 'combined') {
+                view2d.classList.add('hidden');
+                view3d.classList.remove('hidden'); view3d.classList.add('grid');
+                ctrlBoyle.classList.add('hidden');
+                ctrlCharles.classList.add('hidden');
+                ctrlCombined.classList.remove('hidden'); ctrlCombined.classList.add('flex');
+                bgSwitch.classList.add('hidden');
+                camPresets.classList.remove('hidden'); camPresets.classList.add('flex');
+                animPat.classList.remove('hidden'); animPat.classList.add('flex');
+                document.getElementById('auto-rev-label').textContent = '◀ 逆変化';
+                document.getElementById('auto-fwd-label').textContent = '▶ 順変化';
+
+                setTimeout(() => {
+                    initThree3DSurface();
+                    resizeAllCanvases();
+                }, 30);
+            } else {
+                view3d.classList.add('hidden'); view3d.classList.remove('grid');
+                view2d.classList.remove('hidden');
+                camPresets.classList.add('hidden'); camPresets.classList.remove('flex');
+                ctrlCombined.classList.add('hidden'); ctrlCombined.classList.remove('flex');
+                animPat.classList.add('hidden'); animPat.classList.remove('flex');
+
+                if (mode === 'boyle') {
+                    ctrlBoyle.classList.remove('hidden'); ctrlBoyle.classList.add('flex');
+                    ctrlCharles.classList.add('hidden'); ctrlCharles.classList.remove('flex');
+                    bgSwitch.classList.remove('hidden'); bgSwitch.classList.add('flex');
+                    document.getElementById('sim-badge').textContent = '温度一定：おもりとピストンによる圧縮・膨張';
+                    document.getElementById('graph2d-title').textContent = 'ボイルの法則：気体の体積 V と圧力 p の関係 (温度一定)';
+                    document.getElementById('btn-comp-curves').textContent = `高温・低温の比較表示: ${showCompareCurves ? 'ON' : 'OFF'}`;
+                    document.getElementById('auto-rev-label').textContent = '◀ 膨張 (低圧へ)';
+                    document.getElementById('auto-fwd-label').textContent = '▶ 圧縮 (高圧へ)';
+                } else {
+                    ctrlBoyle.classList.add('hidden'); ctrlBoyle.classList.remove('flex');
+                    ctrlCharles.classList.remove('hidden'); ctrlCharles.classList.add('flex');
+                    bgSwitch.classList.add('hidden'); bgSwitch.classList.remove('flex');
+                    document.getElementById('sim-badge').textContent = '圧力(外圧)一定：恒温槽による加熱・冷却と熱膨張';
+                    document.getElementById('graph2d-title').textContent = 'シャルルの法則：気体の体積 V と温度 T (K / ℃) の関係 (圧力一定)';
+                    document.getElementById('btn-comp-curves').textContent = `低圧・高圧の比較表示: ${showCompareCurves ? 'ON' : 'OFF'}`;
+                    document.getElementById('auto-rev-label').textContent = '◀ 冷却 (低温へ)';
+                    document.getElementById('auto-fwd-label').textContent = '▶ 加熱 (高温へ)';
+                }
+
+                renderExperimentPanel();
+                setTimeout(resizeAllCanvases, 20);
+            }
+        }
+
+        // ★ 自動状態変化（オートアニメーション）制御関数
+        function startAutoPlay(mode) {
+            autoPlayMode = mode; // 1: 順方向, -1: 逆方向, 2: 往復ループ
+            if (mode === 1) {
+                autoLoopDir = 1;
+                if (currentMode === 'boyle' && boyleP >= 2.48) boyleP = 0.60;
+                if (currentMode === 'charles' && charlesTCelsius >= 178) charlesTCelsius = -273;
+                if (currentMode === 'combined' && anim3DPhase >= 0.98) anim3DPhase = 0.0;
+            } else if (mode === -1) {
+                autoLoopDir = -1;
+                if (currentMode === 'boyle' && boyleP <= 0.62) boyleP = 2.50;
+                if (currentMode === 'charles' && charlesTCelsius <= -270) charlesTCelsius = 180;
+                if (currentMode === 'combined' && anim3DPhase <= 0.02) anim3DPhase = 1.0;
+            }
+            updateAutoPlayButtonsUI();
+        }
+
+        function stopAutoPlay() {
+            autoPlayMode = 0;
+            updateAutoPlayButtonsUI();
+        }
+
+        function updateAutoPlayButtonsUI() {
+            const bRev = document.getElementById('btn-auto-rev');
+            const bFwd = document.getElementById('btn-auto-fwd');
+            const bLoop = document.getElementById('btn-auto-loop');
+            if (!bRev) return;
+            bRev.classList.toggle('ring-2', autoPlayMode === -1);
+            bRev.classList.toggle('ring-white', autoPlayMode === -1);
+            bFwd.classList.toggle('ring-2', autoPlayMode === 1);
+            bFwd.classList.toggle('ring-white', autoPlayMode === 1);
+            bLoop.classList.toggle('ring-2', autoPlayMode === 2);
+            bLoop.classList.toggle('ring-white', autoPlayMode === 2);
+        }
+
+        function setAutoSpeed(spd) {
+            autoSpeed = spd;
+            [0.25, 0.5, 1, 2].forEach(v => {
+                const btn = document.getElementById(`spd-${v}`);
+                if (!btn) return;
+                btn.className = Math.abs(v - spd) < 0.01
+                    ? 'px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white'
+                    : 'px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-400 hover:text-white';
+            });
+        }
+
+        function set3DAnimPattern(pat) {
+            anim3DPattern = pat;
+            const map = { 'boyle': 'btn-3dpat-boyle', 'charles': 'btn-3dpat-charles', 'both': 'btn-3dpat-both' };
+            Object.keys(map).forEach(k => {
+                const btn = document.getElementById(map[k]);
+                if (!btn) return;
+                btn.className = (k === pat)
+                    ? 'px-2 py-0.5 rounded bg-sky-600 text-white font-bold'
+                    : 'px-2 py-0.5 rounded text-slate-300 hover:text-white';
+            });
+        }
+
+        // フレームごとの自動状態更新（モデル図・グラフ・3D曲面すべてを滑らかに同期変化）
+        function stepAutoAnimation() {
+            if (autoPlayMode === 0) return;
+            const dir = (autoPlayMode === 2) ? autoLoopDir : autoPlayMode;
+
+            if (currentMode === 'boyle') {
+                boyleP += dir * 0.0045 * autoSpeed;
+                if (boyleP >= 2.50) {
+                    boyleP = 2.50;
+                    if (autoPlayMode === 2) autoLoopDir = -1; else stopAutoPlay();
+                } else if (boyleP <= 0.60) {
+                    boyleP = 0.60;
+                    if (autoPlayMode === 2) autoLoopDir = 1; else stopAutoPlay();
+                }
+                document.getElementById('boyle-p-slider').value = Math.round(boyleP * 100);
+                renderExperimentPanel();
+
+            } else if (currentMode === 'charles') {
+                charlesTCelsius += dir * 1.1 * autoSpeed;
+                if (charlesTCelsius >= 180) {
+                    charlesTCelsius = 180;
+                    if (autoPlayMode === 2) autoLoopDir = -1; else stopAutoPlay();
+                } else if (charlesTCelsius <= -273) {
+                    charlesTCelsius = -273;
+                    if (autoPlayMode === 2) autoLoopDir = 1; else stopAutoPlay();
+                }
+                document.getElementById('charles-t-slider').value = Math.round(charlesTCelsius);
+                renderExperimentPanel();
+
+            } else if (currentMode === 'combined') {
+                anim3DPhase += dir * 0.003 * autoSpeed;
+                if (anim3DPhase >= 1.0) {
+                    anim3DPhase = 1.0;
+                    if (autoPlayMode === 2) autoLoopDir = -1; else stopAutoPlay();
+                } else if (anim3DPhase <= 0.0) {
+                    anim3DPhase = 0.0;
+                    if (autoPlayMode === 2) autoLoopDir = 1; else stopAutoPlay();
+                }
+
+                if (anim3DPattern === 'boyle') {
+                    // T一定のまま、圧力 p を 0.65 ⇄ 2.45 の間でスキャン（ボイル双曲線上を移動）
+                    combinedP = 0.65 + anim3DPhase * (2.45 - 0.65);
+                } else if (anim3DPattern === 'charles') {
+                    // p一定のまま、絶対温度 T を 150K ⇄ 490K の間でスキャン（シャルル直線上を移動）
+                    combinedT = Math.round(150 + anim3DPhase * (490 - 150));
+                } else {
+                    // p と T の両方を同時に変化させ、3D曲面 (pV/T = k) の上を対角線状にダイナミックに移動！
+                    combinedP = 0.70 + anim3DPhase * (2.35 - 0.70);
+                    combinedT = Math.round(170 + (0.5 + 0.5 * Math.sin(anim3DPhase * Math.PI * 2)) * 310);
+                }
+
+                document.getElementById('combined-t-slider').value = combinedT;
+                document.getElementById('combined-p-slider').value = Math.round(combinedP * 100);
+                document.getElementById('combined-t-val').textContent = `${combinedT} K (${combinedT - 273}℃)`;
+                document.getElementById('combined-p-val').textContent = `${combinedP.toFixed(2)}×10⁵ Pa`;
+                update3DSlicesAndMarkers();
+            }
+        }
+
+        // ボイル操作ハンドラ
+        function onBoylePSlider(val) {
+            boyleP = parseInt(val, 10) / 100.0;
+            renderExperimentPanel();
+        }
+        function setBoylePreset(pVal) {
+            boyleTempLevel = 'mid';
+            updateBoyleTempButtons();
+            boyleP = pVal;
+            document.getElementById('boyle-p-slider').value = Math.round(pVal * 100);
+            renderExperimentPanel();
+        }
+        function setBoyleTempLevel(lvl) {
+            boyleTempLevel = lvl;
+            updateBoyleTempButtons();
+            renderExperimentPanel();
+        }
+        function updateBoyleTempButtons() {
+            ['low', 'mid', 'high'].forEach(l => {
+                const btn = document.getElementById(`btn-bt-${l}`);
+                btn.className = (l === boyleTempLevel)
+                    ? 'px-2 py-0.5 rounded-lg bg-sky-600 text-white font-bold'
+                    : 'px-2 py-0.5 rounded-lg text-slate-300 hover:bg-slate-800';
+            });
+        }
+        function setBoyleGraphType(type) {
+            boyleGraphType = type;
+            const map = { 'V_p': 'btn-bg-vp', 'V_invP': 'btn-bg-vinvp', 'pV_p': 'btn-bg-pvp' };
+            Object.keys(map).forEach(k => {
+                const btn = document.getElementById(map[k]);
+                btn.className = (k === type)
+                    ? 'px-2 py-1 rounded-lg bg-sky-600 text-white font-bold transition'
+                    : 'px-2 py-1 rounded-lg text-slate-300 hover:text-white transition';
+            });
+        }
+
+        // シャルル操作ハンドラ
+        function onCharlesTSlider(val) {
+            charlesTCelsius = parseFloat(val);
+            renderExperimentPanel();
+        }
+        function setCharlesPreset(tCel) {
+            charlesPressLevel = 'mid';
+            updateCharlesPressButtons();
+            charlesTCelsius = tCel;
+            document.getElementById('charles-t-slider').value = tCel;
+            renderExperimentPanel();
+        }
+        function setCharlesPressLevel(lvl) {
+            charlesPressLevel = lvl;
+            updateCharlesPressButtons();
+            renderExperimentPanel();
+        }
+        function updateCharlesPressButtons() {
+            ['low', 'mid', 'high'].forEach(l => {
+                const btn = document.getElementById(`btn-cp-${l}`);
+                btn.className = (l === charlesPressLevel)
+                    ? 'px-2 py-0.5 rounded-lg bg-rose-600 text-white font-bold'
+                    : 'px-2 py-0.5 rounded-lg text-slate-300 hover:bg-slate-800';
+            });
+        }
+
+        function toggleCompareCurves() {
+            showCompareCurves = !showCompareCurves;
+            const prefix = currentMode === 'boyle' ? '高温・低温' : '低圧・高圧';
+            document.getElementById('btn-comp-curves').textContent = `${prefix}の比較表示: ${showCompareCurves ? 'ON' : 'OFF'}`;
+        }
+
+        // モード3（3Dボイル・シャルル）操作ハンドラ
+        function onCombinedSlider() {
+            combinedT = parseInt(document.getElementById('combined-t-slider').value, 10);
+            combinedP = parseInt(document.getElementById('combined-p-slider').value, 10) / 100.0;
+
+            document.getElementById('combined-t-val').textContent = `${combinedT} K (${combinedT - 273}℃)`;
+            document.getElementById('combined-p-val').textContent = `${combinedP.toFixed(2)}×10⁵ Pa`;
+            update3DSlicesAndMarkers();
+        }
+
+        function toggle3DSlice(which) {
+            if (which === 'T') {
+                showSliceT = !showSliceT;
+                document.getElementById('btn-slice-t').className = showSliceT
+                    ? 'px-2.5 py-0.5 rounded-lg bg-sky-600 text-white font-bold transition shadow'
+                    : 'px-2.5 py-0.5 rounded-lg bg-slate-800 text-slate-400 transition';
+            } else {
+                showSliceP = !showSliceP;
+                document.getElementById('btn-slice-p').className = showSliceP
+                    ? 'px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white font-bold transition shadow'
+                    : 'px-2.5 py-0.5 rounded-lg bg-slate-800 text-slate-400 transition';
+            }
+            update3DSlicesAndMarkers();
+        }
+
+        function toggle3DAuxLines() {
+            show3DAuxLines = !show3DAuxLines;
+            document.getElementById('btn-aux-lines').className = show3DAuxLines
+                ? 'px-2.5 py-0.5 rounded-lg bg-amber-500 text-slate-950 font-bold transition shadow'
+                : 'px-2.5 py-0.5 rounded-lg bg-slate-800 text-slate-400 transition';
+            document.getElementById('btn-aux-lines').innerHTML = `<i class="fa-solid fa-compass-drafting mr-1"></i>3D補助線・垂線: ${show3DAuxLines ? 'ON' : 'OFF'}`;
+            update3DSlicesAndMarkers();
+        }
+
+        function toggle3DMeshLines() {
+            show3DMeshLines = !show3DMeshLines;
+            if (surfaceGridGroup) surfaceGridGroup.visible = show3DMeshLines;
+            document.getElementById('btn-mesh-lines').className = show3DMeshLines
+                ? 'px-2.5 py-0.5 rounded-lg bg-indigo-600 text-white font-bold transition shadow'
+                : 'px-2.5 py-0.5 rounded-lg bg-slate-800 text-slate-400 transition';
+            document.getElementById('btn-mesh-lines').innerHTML = `<i class="fa-solid fa-border-all mr-1"></i>曲面メッシュ線: ${show3DMeshLines ? 'ON' : 'OFF'}`;
+        }
+
+        function switch3DProjection(useOrtho) {
+            if (!isThreeInitialized) return;
+            is3DOrtho = useOrtho;
+            const prevPos = threeCamera.position.clone();
+            const prevTarget = threeControls.target.clone();
+
+            threeCamera = is3DOrtho ? ortho3DCamera : persp3DCamera;
+            threeCamera.position.copy(prevPos);
+            threeControls.object = threeCamera;
+            threeControls.target.copy(prevTarget);
+            threeControls.update();
+
+            const btn = document.getElementById('btn-proj-mode');
+            if (btn) {
+                btn.textContent = is3DOrtho ? '投影: 平行投影 (2Dグラフ完全一致)' : '投影: 遠近3D';
+                btn.className = is3DOrtho
+                    ? 'px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 text-[11px] font-bold border border-amber-500/40 transition'
+                    : 'px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold border border-slate-700 transition';
+            }
+        }
+
+        function toggle3DProjectionMode() {
+            switch3DProjection(!is3DOrtho);
+        }
+
+        // ★ 見る角度によって「ボイルの法則のグラフ」「シャルルの法則のグラフ」に見える視点設計
+        function set3DCamera(view) {
+            if (!threeCamera || !threeControls) return;
+
+            const titleEl = document.getElementById('camera-angle-title');
+            const descEl = document.getElementById('camera-angle-desc');
+
+            // 視点ボタンのハイライト更新
+            const btnMap = { 'iso': 'btn-cam-iso', 'boyle': 'btn-cam-boyle', 'charles': 'btn-cam-charles', 'pt': 'btn-cam-pt' };
+            Object.keys(btnMap).forEach(k => {
+                const b = document.getElementById(btnMap[k]);
+                if (!b) return;
+                if (k === view) {
+                    b.className = 'px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold transition shadow';
+                } else {
+                    b.className = 'px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white font-semibold transition border border-slate-700';
+                }
+            });
+
+            if (view === 'iso') {
+                // 資料集と同じ斜め俯瞰3Dアングル（遠近投影）
+                switch3DProjection(false);
+                camTargetLook.set(5, 4.8, -5);
+                camTargetPos.set(16.5, 12.5, 17.5);
+                titleEl.innerHTML = `<i class="fa-solid fa-cube text-amber-400"></i><span>立体俯瞰アングル（資料集の3D状態曲面 pV/T = 一定）</span>`;
+                descEl.textContent = '圧力 p・体積 V・絶対温度 T の3軸がつくる空間曲面と、T一定(青)・p一定(緑)の2つの切断平面を立体的に観察できます。';
+
+            } else if (view === 'boyle') {
+                // ① ボイルの法則に見える角度：温度T軸の正面から p-V 平面を平行投影で見る！
+                switch3DProjection(true);
+                showSliceT = true;
+                document.getElementById('btn-slice-t').className = 'px-2.5 py-0.5 rounded-lg bg-sky-600 text-white font-bold transition shadow';
+                update3DSlicesAndMarkers();
+
+                camTargetLook.set(5.0, 4.8, -5.0);
+                camTargetPos.set(5.0, 4.8, 22.0); // Z軸正面から真っ直ぐ見る -> 横軸が圧力p（左が低圧→右が高圧）、縦軸が体積Vになる！
+                titleEl.innerHTML = `<i class="fa-solid fa-eye text-sky-400"></i><span>【ボイルの法則に見える角度】温度T軸の正面から p-V 平面を観察中</span>`;
+                descEl.textContent = '正面から見ることで奥行き(温度T軸)が重なり、3D曲面上の等温線と青い切り口が「ボイルの法則の反比例グラフ(縦軸V - 横軸p)」そのものに見えます！';
+
+            } else if (view === 'charles') {
+                // ② シャルルの法則に見える角度：圧力p軸の右側面（プラスX側：x = +27.0）から V-T 平面を平行投影で見る！
+                // ★ 修正ポイント：+X側から原点方向(-X)を見ると、手前(z=0: T=0K)が画面の「左」、奥(z=-10: T=500K)が画面の「右」、体積V(+Y)が「上」になるため、
+                // 通常のシャルルの法則のグラフ（左端が原点0K、右に行くほど高温Tで右上がりの比例直線）と左右の向きまで100%一致します！
+                switch3DProjection(true);
+                showSliceP = true;
+                document.getElementById('btn-slice-p').className = 'px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white font-bold transition shadow';
+                update3DSlicesAndMarkers();
+
+                camTargetLook.set(5.0, 4.8, -5.0);
+                camTargetPos.set(27.0, 4.8, -5.0); // 右側面(+X)から真横を見る -> 左端が 0 K、右端が 500 K の右上がり直線になる！
+                titleEl.innerHTML = `<i class="fa-solid fa-eye text-emerald-400"></i><span>【シャルルの法則に見える角度】横軸 T が左(0K)→右(高温)の右上がり比例直線</span>`;
+                descEl.textContent = '右側面から見ることで、左端が絶対零度(0 K)・右方向が高温(T)・上方向が体積(V)となり、通常のシャルルの法則のグラフ（右上がりの比例直線）と同じ向きに見えます！';
+
+            } else if (view === 'pt') {
+                // ③ 真上から p-T 床面を見るアングル
+                switch3DProjection(true);
+                camTargetLook.set(5.0, 0.0, -5.0);
+                camTargetPos.set(5.0, 26.0, -4.99);
+                titleEl.innerHTML = `<i class="fa-solid fa-eye text-purple-400"></i><span>【真上からの角度】体積V軸の上から p-T 平面を観察中</span>`;
+                descEl.textContent = '真上から見下ろすと体積Vの高さが重なり、体積一定での圧力pと絶対温度Tの比例関係（p/T = 一定）が見えます。';
+            }
+
+            camAnimActive = true;
+        }
+
+        function saveCurrentAsState1() {
+            const curV2 = (K_3D * combinedT) / combinedP;
+            state1 = { p: combinedP, V: curV2, T: combinedT };
+            update3DSlicesAndMarkers();
+        }
+
+        function toggleDrawer() {
+            const drawer = document.getElementById('side-drawer');
+            const isClosed = drawer.classList.contains('translate-x-[110%]');
+            drawer.classList.toggle('translate-x-[110%]', !isClosed);
+            drawer.classList.toggle('translate-x-0', isClosed);
+        }
+
+        // 2Dグラフ上の直接ドラッグ操作
+        function setupGraphDrag() {
+            let dragging = false;
+            const handlePointer = (clientX) => {
+                const rect = graph2dCanvas.getBoundingClientRect();
+                const x = clientX - rect.left;
+                const padL = 56, padR = 28;
+                const gw = rect.width - padL - padR;
+                const nx = Math.max(0.0, Math.min(1.0, (x - padL) / gw));
+
+                if (currentMode === 'boyle') {
+                    if (boyleGraphType === 'V_invP') {
+                        const invP = Math.max(0.4, Math.min(1.66, nx * 1.8));
+                        boyleP = Math.max(0.60, Math.min(2.50, 1.0 / invP));
+                    } else {
+                        boyleP = Math.max(0.60, Math.min(2.50, nx * 2.7));
+                    }
+                    document.getElementById('boyle-p-slider').value = Math.round(boyleP * 100);
+                } else if (currentMode === 'charles') {
+                    const tk = nx * 460.0;
+                    charlesTCelsius = Math.max(-273, Math.min(180, Math.round(tk - 273)));
+                    document.getElementById('charles-t-slider').value = charlesTCelsius;
+                }
+                renderExperimentPanel();
+            };
+
+            graph2dCanvas.addEventListener('pointerdown', (e) => { dragging = true; handlePointer(e.clientX); });
+            window.addEventListener('pointermove', (e) => { if (dragging) handlePointer(e.clientX); });
+            window.addEventListener('pointerup', () => { dragging = false; });
+        }
+
+        function resizeAllCanvases() {
+            const sWrap = document.getElementById('sim2d-canvas-wrap');
+            const gWrap = document.getElementById('graph2d-canvas-wrap');
+            if (sWrap && gWrap && currentMode !== 'combined') {
+                sim2dCanvas.width = sWrap.clientWidth;
+                sim2dCanvas.height = sWrap.clientHeight;
+                graph2dCanvas.width = gWrap.clientWidth;
+                graph2dCanvas.height = gWrap.clientHeight;
+            }
+
+            if (currentMode === 'combined') {
+                const slWrap = document.getElementById('slice2d-canvas-wrap');
+                if (slWrap) {
+                    slice2dCanvas.width = slWrap.clientWidth;
+                    slice2dCanvas.height = slWrap.clientHeight;
+                }
+                const tCont = document.getElementById('three-container');
+                if (tCont && isThreeInitialized) {
+                    const w = tCont.clientWidth;
+                    const h = tCont.clientHeight;
+                    threeCamera.aspect = w / h;
+                    threeCamera.updateProjectionMatrix();
+                    threeRenderer.setSize(w, h);
+                }
+            }
+        }
+
+        function animateLoop() {
+            requestAnimationFrame(animateLoop);
+
+            // 自動状態変化（オートアニメーション）のステップ実行
+            stepAutoAnimation();
+
+            if (currentMode !== 'combined') {
+                draw2DSimulation();
+                draw2DGraph();
+            } else {
+                if (isThreeInitialized) {
+                    // カメラアングルの滑らかなアニメーション遷移
+                    if (camAnimActive) {
+                        threeCamera.position.lerp(camTargetPos, 0.12);
+                        threeControls.target.lerp(camTargetLook, 0.12);
+                        if (threeCamera.position.distanceTo(camTargetPos) < 0.05) {
+                            threeCamera.position.copy(camTargetPos);
+                            threeControls.target.copy(camTargetLook);
+                            camAnimActive = false;
+                        }
+                    }
+                    threeControls.update();
+                    threeRenderer.render(threeScene, threeCamera);
+                }
+                draw3DSlice2DGraphs();
+                drawMini3DCylinder();
+            }
+        }
+
+        window.onload = () => {
+            resizeAllCanvases();
+            renderExperimentPanel();
+            setupGraphDrag();
+            window.addEventListener('resize', resizeAllCanvases);
+            animateLoop();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>理想気体と実在気体：分子間力・分子の体積と圧縮因子Zシミュレーター</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Noto Sans JP', 'Inter', sans-serif;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.25); }
+        ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.8); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen overflow-hidden flex flex-col relative">
+
+    <!-- =====================================================================
+         上部ヘッダー（4つの学習タブ切替 ＆ 解説ドロワー）
+    ====================================================================== -->
+    <header class="w-full px-3 pt-2 pb-1.5 z-20 flex flex-wrap items-center justify-between gap-2 shrink-0 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md">
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full py-0.5">
+            <a href="index.html" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition shrink-0" title="目次ポータルへ戻る">
+                <i class="fa-solid fa-house text-sky-400"></i>
+                <span class="hidden sm:inline">目次</span>
+            </a>
+
+            <!-- 資料集 p.112 の構成に対応した4モードタブ -->
+            <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 shrink-0">
+                <button id="tab-pressure" onclick="selectMode('pressure')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-600 text-white shadow flex items-center gap-1.5">
+                    <i class="fa-solid fa-gauge-high"></i>
+                    <span>① 圧力の影響と気体の種類 <span class="hidden md:inline font-normal opacity-90">(H₂, N₂, CH₄, CO₂)</span></span>
+                </button>
+                <button id="tab-methane" onclick="selectMode('methane')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white hover:bg-slate-800/70 flex items-center gap-1.5">
+                    <i class="fa-solid fa-temperature-three-quarters text-rose-400"></i>
+                    <span>② メタンの温度別比較 <span class="hidden md:inline font-normal opacity-90">(200K / 300K / 500K)</span></span>
+                </button>
+                <button id="tab-volume" onclick="selectMode('volume')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-amber-300 hover:text-white hover:bg-slate-800/70 flex items-center gap-1.5 border border-amber-500/30">
+                    <i class="fa-solid fa-chart-column text-amber-400"></i>
+                    <span>③ 1 molの実在気体の体積 <span class="hidden md:inline font-normal opacity-90">(22.4 Lからのずれ)</span></span>
+                </button>
+                <button id="tab-temp" onclick="selectMode('temp')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-emerald-300 hover:text-white hover:bg-slate-800/70 flex items-center gap-1.5 border border-emerald-500/30">
+                    <i class="fa-solid fa-sun text-emerald-400"></i>
+                    <span>④ 温度の影響 (Z-Tグラフ) <span class="hidden md:inline font-normal opacity-90">(高温で理想気体へ)</span></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 右側：要因分解トグル ＆ 解説ドロワー -->
+        <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+            <div class="hidden xl:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 text-[11px]">
+                <span class="text-slate-400 px-1.5">ずれの要因分解:</span>
+                <button id="btn-factor-both" onclick="setVdWFactor('both')" class="px-2 py-1 rounded-lg bg-sky-600 text-white font-bold transition" title="分子間力(a)と分子自身の体積(b)の両方がはたらく実際の気体">
+                    実際 (引力a ＋ 体積b)
+                </button>
+                <button id="btn-factor-a" onclick="setVdWFactor('only_a')" class="px-2 py-1 rounded-lg text-slate-300 hover:text-white transition" title="もし分子自身の体積が0で、分子間力(引力)だけがはたらいたら？(Z < 1)">
+                    分子間力(a)のみ
+                </button>
+                <button id="btn-factor-b" onclick="setVdWFactor('only_b')" class="px-2 py-1 rounded-lg text-slate-300 hover:text-white transition" title="もし分子間力が0で、分子自身の体積(排除体積)だけがあったら？(Z > 1)">
+                    分子の体積(b)のみ
+                </button>
+            </div>
+
+            <button onclick="toggleDrawer()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition shadow flex items-center gap-1.5">
+                <i class="fa-solid fa-book-open"></i>
+                <span>状態方程式・解説</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- =====================================================================
+         メインビューポート（左5列：理想気体 vs 実在気体 粒子モデル / 右7列：Z = pV/nRT グラフ＆要因分析）
+    ====================================================================== -->
+    <main class="flex-1 w-full overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2 p-2 sm:p-2.5 bg-slate-950 relative">
+        
+        <!-- 左側（5列）：理想気体 vs 実在気体（高圧・低温モデル）リアルタイム粒子シミュレーション -->
+        <section class="lg:col-span-5 relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-900/70 flex flex-col min-h-[250px]">
+            <div class="px-3 py-1.5 bg-slate-900/95 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs z-10">
+                <div class="flex items-center gap-1.5">
+                    <span id="model-scene-badge" class="px-2.5 py-0.5 rounded-full font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40">
+                        ミクロ比較：理想気体 vs 実在気体
+                    </span>
+                </div>
+                <div class="flex items-center gap-1.5 text-[11px]">
+                    <span class="text-slate-400">選択気体:</span>
+                    <strong id="active-gas-label" class="text-amber-300 font-bold">二酸化炭素 CO₂ (分子量 44)</strong>
+                </div>
+            </div>
+
+            <!-- 粒子シミュレーション Canvas -->
+            <div class="flex-1 relative w-full h-full overflow-hidden" id="particle-canvas-wrap">
+                <canvas id="particle-canvas" class="w-full h-full block"></canvas>
+            </div>
+
+            <!-- 左下：ファンデルワールスの状態方程式 ＆ 現在のずれの支配要因バー -->
+            <div class="px-3 py-2 bg-slate-900/95 border-t border-slate-800 text-[11px] space-y-1.5 shrink-0">
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-slate-300">● ファンデルワールスの状態方程式と現在の支配要因:</span>
+                    <span class="font-mono text-amber-300 font-bold bg-amber-950/50 px-2 py-0.5 rounded border border-amber-500/30">
+                        (p ＋ n²a/V²)(V － nb) ＝ nRT
+                    </span>
+                </div>
+                <!-- 分子間力(Zを1より下げる力) vs 分子自身の体積(Zを1より上げる力) のリアルタイム綱引きゲージ -->
+                <div class="grid grid-cols-12 items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                    <div class="col-span-4 text-left pl-1">
+                        <div class="text-[10px] text-cyan-400 font-bold">↓ 分子間力 (引力 a)</div>
+                        <div class="text-[9.5px] text-slate-400">Zを1より小さくする: <strong id="gauge-a-pct" class="text-cyan-300">-38%</strong></div>
+                    </div>
+                    <div class="col-span-4 flex flex-col items-center">
+                        <div id="dominant-effect-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-center">
+                            分子間力の影響が優勢 (Z ＜ 1)
+                        </div>
+                    </div>
+                    <div class="col-span-4 text-right pr-1">
+                        <div class="text-[10px] text-rose-400 font-bold">↑ 分子自身の体積 (b)</div>
+                        <div class="text-[9.5px] text-slate-400">Zを1より大きくする: <strong id="gauge-b-pct" class="text-rose-300">+12%</strong></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 右側（7列）：資料集のグラフ（圧縮因子 Z = pV/nRT または 1mol体積棒グラフ）＆ 比較表 -->
+        <section class="lg:col-span-7 flex flex-col gap-2 overflow-hidden min-h-[260px]">
+            
+            <!-- 右上：インタラクティブグラフ Canvas -->
+            <div class="flex-1 relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-900/70 flex flex-col min-h-[200px]">
+                <div class="px-3 py-1.5 bg-slate-900/95 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs z-10">
+                    <div class="font-bold text-slate-100 flex items-center gap-1.5">
+                        <i class="fa-solid fa-chart-line text-sky-400"></i>
+                        <span id="main-graph-title">圧力の影響：pV/nRT と 圧力 p [×10⁵ Pa] の関係 (0℃ / 273K)</span>
+                    </div>
+
+                    <!-- モード1用：注目する気体の切り替えボタン -->
+                    <div id="gas-selector-pills" class="flex items-center gap-1 text-[11px]">
+                        <span class="text-slate-400 mr-0.5 hidden sm:inline">気体選択:</span>
+                        <button onclick="selectGasSpecies('H2')" id="pill-H2" class="px-2 py-0.5 rounded-lg bg-slate-800 text-rose-300 hover:bg-rose-600 hover:text-white font-bold transition">H₂</button>
+                        <button onclick="selectGasSpecies('N2')" id="pill-N2" class="px-2 py-0.5 rounded-lg bg-slate-800 text-sky-300 hover:bg-sky-600 hover:text-white font-bold transition">N₂</button>
+                        <button onclick="selectGasSpecies('CH4')" id="pill-CH4" class="px-2 py-0.5 rounded-lg bg-slate-800 text-amber-300 hover:bg-amber-600 hover:text-white font-bold transition">CH₄</button>
+                        <button onclick="selectGasSpecies('CO2')" id="pill-CO2" class="px-2 py-0.5 rounded-lg bg-emerald-600 text-white font-bold transition shadow">CO₂</button>
+                        <button onclick="selectGasSpecies('NH3')" id="pill-NH3" class="px-2 py-0.5 rounded-lg bg-slate-800 text-purple-300 hover:bg-purple-600 hover:text-white font-bold transition">NH₃(極性)</button>
+                    </div>
+                </div>
+
+                <!-- グラフ Canvas -->
+                <div class="flex-1 relative w-full h-full overflow-hidden" id="main-graph-wrap">
+                    <canvas id="main-graph-canvas" class="w-full h-full block cursor-pointer"></canvas>
+                    <div class="absolute top-2 right-2.5 pointer-events-none text-[10px] text-slate-400 bg-slate-950/80 px-2 py-1 rounded-lg border border-slate-800">
+                        <i class="fa-solid fa-hand-pointer text-amber-400 mr-1"></i>グラフ上をクリック/ドラッグして圧力・温度を連続変更
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右下：資料集「理想気体と実在気体の比較表」＆ 現在の数値詳細パネル -->
+            <div class="rounded-2xl border border-slate-800 bg-slate-900/90 p-3 shrink-0 shadow-lg" id="bottom-info-card">
+                <!-- JSでモードに応じた資料集の比較表・高圧/低温モデル解説を描画 -->
+            </div>
+        </section>
+    </main>
+
+    <!-- =====================================================================
+         下部コントロールバー（自動状態変化 ＋ 圧力 p / 温度 T スライダー）
+    ====================================================================== -->
+    <footer class="w-full px-3 sm:px-4 py-1.5 bg-slate-900 border-t border-slate-800 z-20 shrink-0 space-y-1.5">
+        
+        <!-- 上段：自動状態変化（オートアニメーション）＆ クイック状態ジャンプ -->
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 pb-1 border-b border-slate-800/80 text-xs">
+            <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-[11px] font-bold text-emerald-400 flex items-center gap-1 mr-1">
+                    <i class="fa-solid fa-film"></i> 自動スキャン:
+                </span>
+                <button id="btn-auto-rev" onclick="startAutoScan(-1)" class="px-2.5 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold flex items-center gap-1 shadow transition">
+                    <i class="fa-solid fa-backward-step"></i>
+                    <span>◀ 低圧/低温へ</span>
+                </button>
+                <button id="btn-auto-pause" onclick="stopAutoScan()" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1 border border-slate-700 transition">
+                    <i class="fa-solid fa-pause"></i>
+                    <span>停止</span>
+                </button>
+                <button id="btn-auto-fwd" onclick="startAutoScan(1)" class="px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold flex items-center gap-1 shadow transition">
+                    <span>▶ 高圧/高温へ</span>
+                    <i class="fa-solid fa-forward-step"></i>
+                </button>
+                <button id="btn-auto-loop" onclick="startAutoScan(2)" class="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 shadow transition">
+                    <i class="fa-solid fa-repeat"></i>
+                    <span>⇄ 往復オート</span>
+                </button>
+            </div>
+
+            <!-- 特徴的な状態へのワンタップジャンプ -->
+            <div class="flex flex-wrap items-center gap-1">
+                <span class="text-[10px] text-slate-400 mr-1">資料集のポイント:</span>
+                <button onclick="jumpPreset('ideal_limit')" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-sky-600 text-sky-300 hover:text-white text-[11px] font-bold border border-sky-500/30 transition">
+                    ① 低圧(1atm)：理想気体に一致 (Z≒1.0)
+                </button>
+                <button onclick="jumpPreset('dip_min')" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-cyan-600 text-cyan-300 hover:text-white text-[11px] font-bold border border-cyan-500/30 transition">
+                    ② 中圧(約100×10⁵Pa)：分子間力で下に凹む (Z＜1)
+                </button>
+                <button onclick="jumpPreset('high_press')" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-rose-600 text-rose-300 hover:text-white text-[11px] font-bold border border-rose-500/30 transition">
+                    ③ 超高圧(500×10⁵Pa)：分子の体積で急上昇 (Z＞1)
+                </button>
+            </div>
+
+            <!-- 速度切り替え -->
+            <div class="flex items-center bg-slate-950 px-2 py-0.5 rounded-xl border border-slate-800 gap-1">
+                <span class="text-[10px] text-slate-400">速度:</span>
+                <button onclick="setScanSpeed(0.25)" id="spd-0.25" class="px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-400 hover:text-white">0.25x</button>
+                <button onclick="setScanSpeed(0.5)" id="spd-0.5" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">0.5x(ゆっくり)</button>
+                <button onclick="setScanSpeed(1.0)" id="spd-1" class="px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-400 hover:text-white">1.0x</button>
+                <button onclick="setScanSpeed(2.0)" id="spd-2" class="px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-400 hover:text-white">2.0x</button>
+            </div>
+        </div>
+
+        <!-- 下段：圧力 p [×10⁵ Pa] スライダー ＆ 温度 T [K] スライダー -->
+        <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            <!-- 圧力 p スライダー (1 〜 600 ×10⁵ Pa) -->
+            <div class="flex items-center gap-2.5 bg-slate-950/90 px-3.5 py-1.5 rounded-xl border border-slate-800">
+                <span class="text-xs font-bold text-sky-400 shrink-0 flex items-center gap-1">
+                    <i class="fa-solid fa-weight-hanging"></i> 圧力 p:
+                </span>
+                <span class="text-[10px] text-slate-400 shrink-0">低圧 1</span>
+                <input 
+                    type="range" 
+                    id="pressure-slider" 
+                    min="1" 
+                    max="600" 
+                    value="120" 
+                    oninput="onPressureSlider(this.value)"
+                    class="w-full accent-sky-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                >
+                <span class="text-[10px] text-slate-400 shrink-0">600</span>
+                <span id="pressure-val-label" class="text-xs font-mono font-bold text-white w-28 text-right shrink-0">120 ×10⁵ Pa</span>
+            </div>
+
+            <!-- 絶対温度 T スライダー (200 K 〜 600 K) -->
+            <div class="flex items-center gap-2.5 bg-slate-950/90 px-3.5 py-1.5 rounded-xl border border-slate-800">
+                <span class="text-xs font-bold text-rose-400 shrink-0 flex items-center gap-1">
+                    <i class="fa-solid fa-temperature-half"></i> 温度 T:
+                </span>
+                <span class="text-[10px] text-slate-400 shrink-0">低温 200K</span>
+                <input 
+                    type="range" 
+                    id="temp-slider" 
+                    min="200" 
+                    max="600" 
+                    value="273" 
+                    oninput="onTempSlider(this.value)"
+                    class="w-full accent-rose-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                >
+                <span class="text-[10px] text-slate-400 shrink-0">600K</span>
+                <span id="temp-val-label" class="text-xs font-mono font-bold text-white w-28 text-right shrink-0">273 K (0℃)</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- =====================================================================
+         右側引き出し式（ドロワー）解説・ファンデルワールス方程式・分子量測定パネル
+    ====================================================================== -->
+    <aside id="side-drawer" class="fixed top-14 bottom-3 right-3 w-80 sm:w-[460px] z-30 glass-panel rounded-3xl shadow-2xl flex flex-col transition-transform duration-300 ease-in-out translate-x-[110%]">
+        <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/70 rounded-t-3xl">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-graduation-cap text-emerald-400"></i>
+                <h2 class="font-bold text-sm text-white">資料集徹底解説：理想気体と実在気体</h2>
+            </div>
+            <button onclick="toggleDrawer()" class="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800 transition">
+                <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+        </div>
+
+        <div class="p-5 flex-1 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-200">
+            
+            <!-- 1. なぜ実在気体は Z = pV/nRT = 1 からずれるのか？ -->
+            <div class="bg-slate-900/90 border border-sky-500/30 p-4 rounded-2xl space-y-2.5">
+                <h3 class="font-bold text-sky-400 text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-scale-unbalanced"></i> 1. 圧縮因子 $Z = \frac{pV}{nRT}$ が $1$ からずれる2つの理由
+                </h3>
+                <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2 text-[11px]">
+                    <div>
+                        <span class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold mr-1">理由①：中程度の高圧・低温で $Z < 1$ になる</span>
+                        <p class="text-slate-300 mt-1">
+                            圧力がある程度大きくなると分子どうしが近づき、<strong>分子間力（引力）</strong>が強くはたらきます。これにより気体が収縮（または壁に衝突する分子が後ろに引っ張られて圧力 $p$ が減少）するため、積 $pV$ が理想気体より小さくなり、<strong>グラフは $1.0$ の直線より下に凹みます</strong>。
+                        </p>
+                    </div>
+                    <div class="border-t border-slate-800 pt-2">
+                        <span class="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold mr-1">理由②：超高圧で $Z > 1$ に急上昇する</span>
+                        <p class="text-slate-300 mt-1">
+                            さらに超高圧になって容器の体積が極端に小さくなると、<strong>分子自身の体積（排除体積 $nb$）</strong>が無視できなくなります。分子が自由に動ける空間よりも容器全体の体積 $V$ の方が分子自身の体積の分だけ大きいため、$pV$ が理想気体より大きくなり、<strong>グラフは $1.0$ を超えて右上がりに急上昇</strong>します。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. 気体の種類によるずれの大きさ（H2, N2, CO2, NH3） -->
+            <div class="bg-slate-900/90 border border-amber-500/30 p-4 rounded-2xl space-y-2">
+                <h3 class="font-bold text-amber-400 text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-vials"></i> 2. どの気体がいちばん理想気体からずれやすいか？
+                </h3>
+                <ul class="list-disc list-inside text-[11px] text-slate-300 space-y-1.5">
+                    <li><strong class="text-rose-300">水素 $\text{H}_2$・ヘリウム $\text{He}$：</strong>分子量が非常に小さく分子間力が極めて弱いため、最初から分子自身の体積の影響（$Z > 1$）が勝ち、下への凹みがほとんどなく右上がりに理想気体に近い挙動を示します。</li>
+                    <li><strong class="text-emerald-300">二酸化炭素 $\text{CO}_2$・塩素 $\text{Cl}_2$・二酸化硫黄 $\text{SO}_2$：</strong>分子量が大きくファンデルワールス力（分子間力）が大きいため、理想気体から大きくずれます。</li>
+                    <li><strong class="text-purple-300">アンモニア $\text{NH}_3$（分子量 $17$）：</strong>分子量は比較的小さいですが、<strong>極性分子であり水素結合がはたらく</strong>ため分子間力が非常に強く、$1\text{ mol}$ の体積も $22.09\text{ L}$ と大きく減少します（資料集の棒グラフ参照）。</li>
+                </ul>
+            </div>
+
+            <!-- 3. どのような条件で実在気体は理想気体に近づくか？ -->
+            <div class="bg-slate-900/90 border border-emerald-500/30 p-4 rounded-2xl space-y-2">
+                <h3 class="font-bold text-emerald-400 text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-temperature-arrow-up"></i> 3. 実在気体が理想気体に近づく条件：「高温・低圧」
+                </h3>
+                <p class="text-[11px] text-slate-300">
+                    ● <strong>高温</strong>になるほど：分子の熱運動エネルギーが大きくなり、<strong>分子間力（引力）を振り切って飛び回る</strong>ため、分子間力の影響が無視できるようになります（メタンの $200\text{ K}\to 300\text{ K}\to 500\text{ K}$ の変化参照）。<br>
+                    ● <strong>低圧</strong>になるほど：容器の体積 $V$ が大きくなって分子間の距離が遠ざかるため、<strong>分子自身の体積も分子間力も無視できる</strong>ようになります。
+                </p>
+            </div>
+
+            <!-- 4. ファンデルワールスの状態方程式の意味 -->
+            <div class="bg-slate-900/90 border border-purple-500/30 p-4 rounded-2xl space-y-2">
+                <h3 class="font-bold text-purple-300 text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-superscript"></i> 4. ファンデルワールスの状態方程式の補正項
+                </h3>
+                <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 font-mono text-center text-xs text-amber-300">
+                    ( p ＋ n²a / V² ) × ( V － nb ) ＝ nRT
+                </div>
+                <p class="text-[11px] text-slate-300">
+                    ・<strong>圧力の補正項 $+\frac{n^2a}{V^2}$</strong>：分子間力（定数 $a$）によって壁への衝突圧力が減った分を補って理想気体の圧力に戻す項。<br>
+                    ・<strong>体積の補正項 $-nb$</strong>：容器の体積 $V$ から分子自身の排除体積（定数 $b$）を差し引き、分子が自由に運動できる空間体積にする項。
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    <!-- =====================================================================
+         メインスクリプト：ファンデルワールス物理計算・粒子モデル・4種グラフ描画
+    ====================================================================== -->
+    <script>
+        /**
+         * 資料集 p.112 のグラフ・数値に完全整合する気体データベース
+         * - 1 molの実在気体の体積 (0℃, 1.013×10^5 Pa) [L]:
+         *   理想気体: 22.41 L
+         *   H2: 22.42 L (分子量 2)
+         *   He: 22.43 L (分子量 4)
+         *   N2: 22.40 L (分子量 28)
+         *   O2: 22.39 L (分子量 32)
+         *   HCl: 22.24 L (分子量 36.5)
+         *   NH3: 22.09 L (分子量 17 - 極性大・水素結合!)
+         *   Cl2: 22.06 L (分子量 71)
+         *   SO2: 21.90 L (分子量 64)
+         */
+        const GAS_SPECIES = {
+            H2: {
+                id: 'H2', name: '水素 H₂', formula: 'H₂', mw: 2,
+                color: '#f43f5e', radius: 4.0,
+                a_strength: 0.04, b_volume: 0.42, // 分子間力が極めて小さく、最初から右上がり (Z >= 1)
+                vol1mol: 22.42, note: '分子間力が非常に小さいため、下への凹みがなく理想気体に近い'
+            },
+            N2: {
+                id: 'N2', name: '窒素 N₂', formula: 'N₂', mw: 28,
+                color: '#38bdf8', radius: 5.5,
+                a_strength: 0.42, b_volume: 0.65,
+                vol1mol: 22.40, note: '無極性分子。中圧でわずかに下に凹み、高圧で1を超える'
+            },
+            CH4: {
+                id: 'CH4', name: 'メタン CH₄', formula: 'CH₄', mw: 16,
+                color: '#fbbf24', radius: 5.8,
+                a_strength: 0.78, b_volume: 0.72,
+                vol1mol: 22.36, note: '低温(200K)ほど分子間力による下への凹みが大きく、高温(500K)で理想気体に近づく'
+            },
+            CO2: {
+                id: 'CO2', name: '二酸化炭素 CO₂', formula: 'CO₂', mw: 44,
+                color: '#10b981', radius: 6.8,
+                a_strength: 1.55, b_volume: 0.82,
+                vol1mol: 22.26, note: '分子量が大きく分子間力が強いため、中圧(約100×10⁵Pa)でZが大きく下に凹む'
+            },
+            NH3: {
+                id: 'NH3', name: 'アンモニア NH₃', formula: 'NH₃', mw: 17,
+                color: '#c084fc', radius: 5.6,
+                a_strength: 1.72, b_volume: 0.68,
+                vol1mol: 22.09, note: '分子量は17と小さいが、極性が大きく水素結合がはたらくためずれが非常に大きい'
+            }
+        };
+
+        // 資料集右上「1 molの実在気体の体積 (0℃, 1.013×10^5 Pa)」棒グラフ用データ
+        const MOLAR_VOLUME_BARS = [
+            { formula: 'H₂',  mw: '(2)',    vol: 22.42, color: '#fb7185', note: '分子量最小' },
+            { formula: 'He',  mw: '(4)',    vol: 22.43, color: '#fb7185', note: '単原子分子' },
+            { formula: 'N₂',  mw: '(28)',   vol: 22.40, color: '#38bdf8', note: '空気の主成分' },
+            { formula: 'O₂',  mw: '(32)',   vol: 22.39, color: '#38bdf8', note: '無極性分子' },
+            { formula: 'HCl', mw: '(36.5)', vol: 22.24, color: '#fbbf24', note: '極性分子' },
+            { formula: 'NH₃', mw: '(17)',   vol: 22.09, color: '#c084fc', note: '極性大・水素結合!' },
+            { formula: 'Cl₂', mw: '(71)',   vol: 22.06, color: '#34d399', note: '分子量大' },
+            { formula: 'SO₂', mw: '(64)',   vol: 21.90, color: '#10b981', note: '分子量大+極性' }
+        ];
+
+        // グローバル状態変数
+        let currentMode = 'pressure';  // 'pressure' | 'methane' | 'volume' | 'temp'
+        let activeGasId = 'CO2';       // 'H2' | 'N2' | 'CH4' | 'CO2' | 'NH3'
+        let currentP = 120.0;          // 圧力 p [×10^5 Pa] (1 〜 600)
+        let currentT = 273.0;          // 絶対温度 T [K] (200 〜 600)
+        let vdwFactorMode = 'both';    // 'both' | 'only_a' | 'only_b'
+
+        // 自動スキャン管理
+        let scanMode = 0;              // 0: 停止, 1: 順方向, -1: 逆方向, 2: 往復
+        let scanLoopDir = 1;
+        let scanSpeed = 0.5;           // デフォルト 0.5x (ゆっくり)
+
+        // Canvas コンテキスト
+        const pCanvas = document.getElementById('particle-canvas');
+        const pCtx = pCanvas.getContext('2d');
+        const gCanvas = document.getElementById('main-graph-canvas');
+        const gCtx = gCanvas.getContext('2d');
+
+        // 理想気体と実在気体の粒子配列
+        const idealParticles = [];
+        const realParticles = [];
+        for (let i = 0; i < 18; i++) {
+            const ang = Math.random() * Math.PI * 2;
+            idealParticles.push({
+                rx: 0.12 + Math.random() * 0.76,
+                ry: 0.12 + Math.random() * 0.76,
+                vx: Math.cos(ang),
+                vy: Math.sin(ang)
+            });
+            realParticles.push({
+                rx: 0.12 + Math.random() * 0.76,
+                ry: 0.12 + Math.random() * 0.76,
+                vx: Math.cos(ang),
+                vy: Math.sin(ang)
+            });
+        }
+
+        /**
+         * 圧縮因子 Z = pV / (nRT) の計算関数
+         * 資料集 p.112 の3つのグラフ（① H2/N2/CO2のZ-p曲線、② メタンの200K/300K/500K曲線、③ 1atmでのZ-T曲線）の
+         * 極小値の位置・深さ・交点に忠実に一致するファンデルワールス経験式モデル
+         *
+         * @param {string} gasId - 'H2' | 'N2' | 'CH4' | 'CO2' | 'NH3'
+         * @param {number} p - 圧力 [×10^5 Pa] (0 〜 600)
+         * @param {number} T - 絶対温度 [K] (150 〜 600)
+         * @param {string} factorMode - 'both' | 'only_a' | 'only_b'
+         */
+        function calcCompressibilityZ(gasId, p, T, factorMode = vdwFactorMode) {
+            const g = GAS_SPECIES[gasId] || GAS_SPECIES.CO2;
+            const tRatio = 273.0 / Math.max(150.0, T); // 低温ほど tRatio が大きく分子間力が急増
+
+            // 1. 分子自身の体積(b)によるプラス寄与 ΔZ_b (> 0): 圧力 p にほぼ比例し、温度が高いほど傾きが緩やかになる
+            let dZ_b = g.b_volume * (p / 600.0) * (0.45 + 0.55 * Math.pow(tRatio, 0.75));
+
+            // 2. 分子間力(a)によるマイナス寄与 ΔZ_a (< 0): 中圧(60〜150×10^5 Pa)で大きく凹み、超高圧では体積項に負ける
+            // 低温(200K)ほど劇的に深くなり、高温(500K)ではほぼ消滅する
+            const dipScale = g.a_strength * Math.pow(tRatio, 2.15);
+            const pNorm = p / 85.0;
+            let dZ_a = -dipScale * 0.46 * (1.0 - Math.exp(-pNorm * 1.35)) * Math.exp(-p / 460.0);
+
+            // CO2(0℃, T=273K) の高圧凝縮後の急激な落ち込みと立ち上がり（資料集の緑色のCO2曲線の鋭い谷を忠実に再現）
+            if (gasId === 'CO2' && T <= 304) {
+                const valley = Math.exp(-Math.pow((p - 75.0) / 38.0, 2));
+                dZ_a -= 0.28 * valley * Math.pow(273.0 / T, 1.5);
+            }
+
+            if (factorMode === 'only_a') dZ_b = 0;
+            if (factorMode === 'only_b') dZ_a = 0;
+
+            const Z = 1.0 + dZ_a + dZ_b;
+            return {
+                Z: Math.max(0.22, Math.min(2.15, Z)),
+                dZ_a,
+                dZ_b
+            };
+        }
+
+        // モード4用：1.01×10^5 Pa (1 atm) における温度 T [K] と Z = pV/nRT の関係（資料集右下のグラフ：0.99 〜 1.01 スケール）
+        function calcLowPressureZvsT(gasId, T) {
+            // 資料集 p.112 右下「温度の影響 (1.01×10^5 Paのとき)」:
+            // H2 は 1.0006 付近でほぼ水平(わずかに1より上)
+            // N2 は低温 100K で 0.991 -> 高温 400K で 1.000 に漸近
+            // CO2 は低温 200K で 0.988 -> 高温 500K で 0.998 に漸近
+            if (gasId === 'H2') {
+                return 1.0005 + 0.0004 * (200.0 / Math.max(120, T));
+            } else if (gasId === 'N2') {
+                return 1.0002 - 0.0095 * Math.pow(130.0 / Math.max(110, T), 2.1);
+            } else if (gasId === 'CH4') {
+                return 1.0001 - 0.0110 * Math.pow(160.0 / Math.max(130, T), 2.1);
+            } else {
+                // CO2 or NH3
+                return 1.0000 - 0.0125 * Math.pow(210.0 / Math.max(175, T), 2.2);
+            }
+        }
+
+        // =====================================================================
+        // 左側：理想気体 vs 実在気体 ミクロ粒子シミュレーション描画
+        // （資料集 p.112 左上の比較図 ＋ 下部の高圧・低温モデルを完全再現）
+        // =====================================================================
+        function drawParticleComparisonCanvas() {
+            const w = pCanvas.width;
+            const h = pCanvas.height;
+            const ctx = pCtx;
+            ctx.clearRect(0, 0, w, h);
+
+            const gas = GAS_SPECIES[activeGasId] || GAS_SPECIES.CO2;
+            const zInfo = calcCompressibilityZ(activeGasId, currentP, currentT);
+
+            // 左右2つのシリンダー配置（左＝理想気体、右＝実在気体）
+            const padX = 16;
+            const gap = 18;
+            const cylW = (w - padX * 2 - gap) / 2;
+            const cylH = Math.min(h - 58, 255);
+            const topY = 40;
+
+            // 圧力 currentP (1〜600) と温度 currentT (200〜600) から容器内のピストン高さを算出
+            const pressRatio = (currentP - 1) / 599.0; // 0.0(低圧) 〜 1.0(超高圧)
+            const tempRatio = (currentT - 200) / 400.0; // 0.0(低温) 〜 1.0(高温)
+
+            // 理想気体の体積高さ
+            const baseGasH = Math.max(52, Math.min(cylH - 26, (cylH - 28) * (1.0 - 0.64 * Math.pow(pressRatio, 0.55)) * (0.78 + 0.22 * tempRatio)));
+            // 実在気体の体積高さ（Z = V_real / V_ideal に連動して、Z<1なら理想気体より縮み、Z>1なら分子自身の体積でかさばる！）
+            const realGasH = Math.max(46, Math.min(cylH - 22, baseGasH * (0.35 + 0.65 * zInfo.Z)));
+
+            // 1. 左シリンダー：理想気体（分子自身の体積＝0、分子間力＝0）
+            drawSingleMicroCylinder(ctx, padX, topY, cylW, cylH, baseGasH, idealParticles, gas, false, zInfo);
+
+            // 2. 右シリンダー：実在気体（分子自身の大きさ b あり、分子間力 a あり、高圧・低温で凝縮も！）
+            drawSingleMicroCylinder(ctx, padX + cylW + gap, topY, cylW, cylH, realGasH, realParticles, gas, true, zInfo);
+
+            // 下部の優勢要因ゲージ更新
+            updateFactorGaugeUI(zInfo);
+        }
+
+        function drawSingleMicroCylinder(ctx, x, y, w, h, gasH, particles, gas, isReal, zInfo) {
+            ctx.save();
+
+            // タイトルラベル
+            ctx.font = 'bold 12px "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = isReal ? '#fbbf24' : '#38bdf8';
+            ctx.fillText(isReal ? `実在気体 (${gas.formula})` : '理想気体 (仮定)', x + w / 2, y - 20);
+
+            ctx.font = '10px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillText(
+                isReal ? '①分子の体積あり ②分子間力あり' : '①分子の体積＝0 ②分子間力＝なし',
+                x + w / 2, y - 5
+            );
+
+            const bottomY = y + h;
+            const pistonBottomY = bottomY - gasH;
+            const pistonThick = 13;
+
+            // 気体空間の背景
+            const bgGrad = ctx.createLinearGradient(x, pistonBottomY, x, bottomY);
+            if (isReal) {
+                bgGrad.addColorStop(0, 'rgba(245, 158, 11, 0.12)');
+                bgGrad.addColorStop(1, 'rgba(14, 165, 233, 0.22)');
+            } else {
+                bgGrad.addColorStop(0, 'rgba(56, 189, 248, 0.10)');
+                bgGrad.addColorStop(1, 'rgba(56, 189, 248, 0.18)');
+            }
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(x + 3, pistonBottomY, w - 6, gasH);
+
+            // 実在気体で「排除体積（分子自身が占める体積 nb）」の視覚化ゾーン（超高圧や体積モードで明示）
+            if (isReal && vdwFactorMode !== 'only_a') {
+                const excludedH = Math.min(gasH * 0.42, (gas.b_volume * 22) * (currentP / 600.0));
+                if (excludedH > 3) {
+                    ctx.fillStyle = 'rgba(244, 63, 94, 0.16)';
+                    ctx.fillRect(x + 3, bottomY - excludedH, w - 6, excludedH);
+                    ctx.strokeStyle = 'rgba(244, 63, 94, 0.5)';
+                    ctx.setLineDash([3, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(x + 3, bottomY - excludedH);
+                    ctx.lineTo(x + w - 3, bottomY - excludedH);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    if (excludedH > 12) {
+                        ctx.font = 'bold 9.5px "Noto Sans JP", sans-serif';
+                        ctx.fillStyle = '#fda4af';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('分子自身の体積 nb (動けない空間)', x + w / 2, bottomY - 4);
+                    }
+                }
+            }
+
+            // 容器内部クリッピング（分子のはみ出しを完全防止）
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x + 3, pistonBottomY, w - 6, gasH - 2);
+            ctx.clip();
+
+            // 粒子半径：理想気体は「体積0の質点（小さな点＋点線円）」、実在気体は「大きさを持つ球体」
+            const r = isReal ? (vdwFactorMode === 'only_a' ? 3.2 : gas.radius * 1.15) : 2.6;
+            const speedScale = 1.45 * Math.sqrt(currentT / 273.0) * (0.6 + 0.4 * Math.min(1.5, scanSpeed));
+
+            const innerLeft = x + 3 + r + 2;
+            const innerRight = x + w - 3 - r - 2;
+            const innerTop = pistonBottomY + r + 2;
+            const innerBottom = bottomY - r - 3;
+            const safeW = Math.max(8, innerRight - innerLeft);
+            const safeH = Math.max(8, innerBottom - innerTop);
+
+            // 粒子位置の更新
+            particles.forEach(pt => {
+                pt.rx += (pt.vx * speedScale) / safeW;
+                pt.ry += (pt.vy * speedScale) / safeH;
+
+                if (pt.rx <= 0) { pt.rx = 0; pt.vx = Math.abs(pt.vx); }
+                if (pt.rx >= 1) { pt.rx = 1; pt.vx = -Math.abs(pt.vx); }
+                if (pt.ry <= 0) { pt.ry = 0; pt.vy = Math.abs(pt.vy); }
+                if (pt.ry >= 1) { pt.ry = 1; pt.vy = -Math.abs(pt.ry); }
+
+                pt.px = innerLeft + pt.rx * safeW;
+                pt.py = innerTop + pt.ry * safeH;
+            });
+
+            // ★ 実在気体のみ：近づいた分子どうしの間に「分子間力（引き合う赤い双方向矢印・バネ線）」を描画（資料集 p.112 のモデル図と完全一致！）
+            if (isReal && vdwFactorMode !== 'only_b' && gas.a_strength > 0.1) {
+                const maxAttractDist = 42 + (currentP / 600) * 18;
+                const attractAlpha = Math.min(0.92, (gas.a_strength * 0.55) * (273.0 / currentT) * (0.35 + 0.65 * (currentP / 300.0)));
+
+                if (attractAlpha > 0.08) {
+                    ctx.save();
+                    for (let i = 0; i < particles.length; i++) {
+                        for (let j = i + 1; j < particles.length; j++) {
+                            const p1 = particles[i], p2 = particles[j];
+                            const dx = p2.px - p1.px, dy = p2.py - p1.py;
+                            const dist = Math.hypot(dx, dy);
+                            if (dist < maxAttractDist && dist > r * 1.8) {
+                                // 分子間力を示すシアンの破線と内向き矢印
+                                ctx.strokeStyle = `rgba(244, 63, 94, ${attractAlpha})`;
+                                ctx.lineWidth = 1.8;
+                                ctx.setLineDash([2, 2]);
+                                ctx.beginPath();
+                                ctx.moveTo(p1.px, p1.py);
+                                ctx.lineTo(p2.px, p2.py);
+                                ctx.stroke();
+                            }
+                        }
+                    }
+                    ctx.restore();
+                }
+            }
+
+            // 粒子の描画
+            particles.forEach(pt => {
+                if (!isReal) {
+                    // 理想気体：資料集の図と同じく「中心の小さな濃青点（体積0）」＋「外側の薄い点線ガイド」
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([2, 2]);
+                    ctx.beginPath();
+                    ctx.arc(pt.px, pt.py, 5.8, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.beginPath();
+                    ctx.arc(pt.px, pt.py, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // 実在気体：体積（大きさ）を持った立体球
+                    const grad = ctx.createRadialGradient(pt.px - r * 0.3, pt.py - r * 0.3, 0.5, pt.px, pt.py, r);
+                    grad.addColorStop(0, '#ffffff');
+                    grad.addColorStop(0.4, gas.color);
+                    grad.addColorStop(1, '#0f172a');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(pt.px, pt.py, r, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            // 容器内の注釈バッジ（資料集の高圧・低温モデルの説明）
+            ctx.font = 'bold 10px "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'center';
+            if (isReal) {
+                if (zInfo.Z < 0.96) {
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                    ctx.fillRect(x + 8, pistonBottomY + 6, w - 16, 19);
+                    ctx.fillStyle = '#67e8f9';
+                    ctx.fillText('分子間力で引き合い 壁への圧力減少 (Z<1)', x + w / 2, pistonBottomY + 19);
+                } else if (zInfo.Z > 1.05) {
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                    ctx.fillRect(x + 8, pistonBottomY + 6, w - 16, 19);
+                    ctx.fillStyle = '#fda4af';
+                    ctx.fillText('分子自身の体積が無視できず Z>1 に増大!', x + w / 2, pistonBottomY + 19);
+                }
+            }
+
+            ctx.restore(); // クリップ解除
+
+            // ピストンヘッド
+            const pGrad = ctx.createLinearGradient(x, pistonBottomY - pistonThick, x + w, pistonBottomY);
+            pGrad.addColorStop(0, '#64748b');
+            pGrad.addColorStop(0.5, '#cbd5e1');
+            pGrad.addColorStop(1, '#475569');
+            ctx.fillStyle = pGrad;
+            ctx.fillRect(x + 3, pistonBottomY - pistonThick, w - 6, pistonThick);
+
+            // ピストンロッド
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(x + w / 2 - 5, y + 2, 10, Math.max(0, pistonBottomY - pistonThick - (y + 2)));
+
+            // シリンダー外壁
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x, bottomY);
+            ctx.lineTo(x + w, bottomY);
+            ctx.lineTo(x + w, y);
+            ctx.stroke();
+
+            // シリンダー直下の Z = pV/nRT 数値比較
+            ctx.font = 'bold 11px "Inter", "Noto Sans JP", monospace';
+            ctx.textAlign = 'center';
+            if (!isReal) {
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillText('pV / nRT ＝ 1.00 (つねに一定)', x + w / 2, bottomY + 15);
+            } else {
+                ctx.fillStyle = zInfo.Z < 0.98 ? '#22d3ee' : (zInfo.Z > 1.03 ? '#fb7185' : '#34d399');
+                ctx.fillText(`pV / nRT ＝ ${zInfo.Z.toFixed(2)} (${zInfo.Z >= 1 ? '+' : ''}${((zInfo.Z - 1) * 100).toFixed(0)}%)`, x + w / 2, bottomY + 15);
+            }
+
+            ctx.restore();
+        }
+
+        function updateFactorGaugeUI(zInfo) {
+            const aPct = Math.round(zInfo.dZ_a * 100);
+            const bPct = Math.round(zInfo.dZ_b * 100);
+            document.getElementById('gauge-a-pct').textContent = `${aPct}%`;
+            document.getElementById('gauge-b-pct').textContent = `+${bPct}%`;
+
+            const badge = document.getElementById('dominant-effect-badge');
+            if (Math.abs(zInfo.Z - 1.0) <= 0.025) {
+                badge.textContent = 'ほぼ理想気体として振る舞う (Z ≒ 1.00)';
+                badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-center';
+            } else if (zInfo.Z < 1.0) {
+                badge.textContent = `分子間力(引力)が優勢 → Z = ${zInfo.Z.toFixed(2)} (＜ 1)`;
+                badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-center';
+            } else {
+                badge.textContent = `分子自身の体積が優勢 → Z = ${zInfo.Z.toFixed(2)} (＞ 1)`;
+                badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 text-center';
+            }
+        }
+
+        // =====================================================================
+        // 右上：資料集 p.112 の4つのグラフ描画
+        // =====================================================================
+        function drawMainGraphCanvas() {
+            const w = gCanvas.width;
+            const h = gCanvas.height;
+            const ctx = gCtx;
+            ctx.clearRect(0, 0, w, h);
+
+            if (currentMode === 'pressure') {
+                drawZvsPressureSpeciesGraph(ctx, w, h);
+            } else if (currentMode === 'methane') {
+                drawMethaneTemperaturesGraph(ctx, w, h);
+            } else if (currentMode === 'volume') {
+                drawMolarVolumeBarChart(ctx, w, h);
+            } else if (currentMode === 'temp') {
+                drawZvsTemperatureLowPGraph(ctx, w, h);
+            }
+        }
+
+        // ① 資料集 p.112 中段左「圧力の影響：H2, N2, CO2 の pV/nRT vs 圧力 p グラフ」
+        function drawZvsPressureSpeciesGraph(ctx, w, h) {
+            const padL = 58, padR = 26, padT = 24, padB = 42;
+            const gw = w - padL - padR;
+            const gh = h - padT - padB;
+
+            const maxP = 600.0;
+            const minZ = 0.0, maxZ = 1.75;
+            const toX = (p) => padL + (p / maxP) * gw;
+            const toY = (z) => padT + (1.0 - (z - minZ) / (maxZ - minZ)) * gh;
+
+            // 背景グリッド
+            drawGraphAxesAndGrid(ctx, padL, padT, gw, gh, toX, toY, [0, 200, 400, 600], [0.5, 1.0, 1.5], '圧力 p [×10⁵ Pa]', 'pV / nRT');
+
+            // 理想気体の水平基準線 (Z = 1.0)
+            const yIdeal = toY(1.0);
+            ctx.save();
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2.4;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(padL, yIdeal);
+            ctx.lineTo(padL + gw, yIdeal);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.font = 'bold 11px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#38bdf8';
+            ctx.textAlign = 'right';
+            ctx.fillText('理想気体 (pV / nRT ＝ 1.0)', padL + gw - 8, yIdeal - 7);
+
+            // 各気体の曲線を描画 (H2, N2, CH4, CO2, NH3)
+            const displayList = ['H2', 'N2', 'CH4', 'CO2', 'NH3'];
+            displayList.forEach(gid => {
+                const g = GAS_SPECIES[gid];
+                const isSelected = (gid === activeGasId);
+                ctx.save();
+                ctx.strokeStyle = g.color;
+                ctx.lineWidth = isSelected ? 3.6 : 1.9;
+                ctx.globalAlpha = isSelected ? 1.0 : 0.55;
+
+                ctx.beginPath();
+                for (let p = 0; p <= 600; p += 6) {
+                    const z = calcCompressibilityZ(gid, p, currentT).Z;
+                    const px = toX(p), py = toY(z);
+                    if (p === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                }
+                ctx.stroke();
+                ctx.restore();
+
+                // 曲線ラベル
+                let labelP = 460;
+                if (gid === 'H2') labelP = 420;
+                else if (gid === 'N2') labelP = 350;
+                else if (gid === 'CH4') labelP = 270;
+                else if (gid === 'CO2') labelP = 185;
+                else if (gid === 'NH3') labelP = 110;
+
+                const zAtLabel = calcCompressibilityZ(gid, labelP, currentT).Z;
+                ctx.font = isSelected ? 'bold 11.5px "Noto Sans JP", sans-serif' : '10.5px "Noto Sans JP", sans-serif';
+                ctx.fillStyle = g.color;
+                ctx.textAlign = 'left';
+                ctx.fillText(`${g.formula}`, toX(labelP) + 4, toY(zAtLabel) + (gid === 'CO2' || gid === 'NH3' ? 14 : -7));
+            });
+
+            // 現在選択中の気体・圧力ポイントのマーカーと垂線＋数値コールアウト
+            const curZ = calcCompressibilityZ(activeGasId, currentP, currentT).Z;
+            const cx = toX(currentP), cy = toY(curZ);
+
+            ctx.save();
+            ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.6; ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(padL, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, padT + gh);
+            ctx.stroke();
+            ctx.restore();
+
+            drawAxisPill(ctx, padL - 4, cy, curZ.toFixed(2), '#10b981', 'right');
+            drawAxisPill(ctx, cx, padT + gh + 14, `${Math.round(currentP)}`, '#38bdf8', 'center');
+
+            drawPointMarker(ctx, cx, cy, GAS_SPECIES[activeGasId].color);
+            drawCalloutBox(
+                ctx, cx, cy,
+                `${GAS_SPECIES[activeGasId].name} (${Math.round(currentT)}K)`,
+                `p = ${Math.round(currentP)}×10⁵ Pa ｜ Z = ${curZ.toFixed(2)}`,
+                w, padL, padT
+            );
+        }
+
+        // ② 資料集 p.112 中段右「メタン(CH4)と理想気体：200K / 300K / 500K の温度別 Z-p グラフ」
+        function drawMethaneTemperaturesGraph(ctx, w, h) {
+            const padL = 58, padR = 26, padT = 24, padB = 42;
+            const gw = w - padL - padR;
+            const gh = h - padT - padB;
+
+            const maxP = 600.0;
+            const minZ = 0.0, maxZ = 2.05;
+            const toX = (p) => padL + (p / maxP) * gw;
+            const toY = (z) => padT + (1.0 - (z - minZ) / (maxZ - minZ)) * gh;
+
+            drawGraphAxesAndGrid(ctx, padL, padT, gw, gh, toX, toY, [0, 200, 400, 600], [0.5, 1.0, 1.5, 2.0], '圧力 p [×10⁵ Pa]', 'pV / nRT');
+
+            // 理想気体の水平線 (Z = 1.0)
+            const yIdeal = toY(1.0);
+            ctx.save();
+            ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2.4; ctx.setLineDash([6, 4]);
+            ctx.beginPath(); ctx.moveTo(padL, yIdeal); ctx.lineTo(padL + gw, yIdeal); ctx.stroke();
+            ctx.restore();
+
+            // 資料集にある3つの代表温度曲線 (200 K, 300 K, 500 K)
+            const tempCurves = [
+                { T: 200, color: '#38bdf8', label: '200 K (低温: 分子間力で大きく凹む)', lx: 95 },
+                { T: 300, color: '#f43f5e', label: '300 K (常温)', lx: 180 },
+                { T: 500, color: '#fbbf24', label: '500 K (高温: 理想気体に近づく)', lx: 290 }
+            ];
+
+            tempCurves.forEach(tc => {
+                ctx.save();
+                ctx.strokeStyle = tc.color;
+                ctx.lineWidth = Math.abs(currentT - tc.T) < 18 ? 3.5 : 2.0;
+                ctx.globalAlpha = Math.abs(currentT - tc.T) < 18 ? 1.0 : 0.65;
+                ctx.beginPath();
+                for (let p = 0; p <= 600; p += 6) {
+                    const z = calcCompressibilityZ('CH4', p, tc.T).Z;
+                    const px = toX(p), py = toY(z);
+                    if (p === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                }
+                ctx.stroke();
+
+                const zL = calcCompressibilityZ('CH4', tc.lx, tc.T).Z;
+                ctx.font = 'bold 10.5px "Noto Sans JP", sans-serif';
+                ctx.fillStyle = tc.color;
+                ctx.fillText(tc.label, toX(tc.lx), toY(zL) + (tc.T === 500 ? -10 : 15));
+                ctx.restore();
+            });
+
+            // 現在のスライダー温度 currentT のメタン曲線（白・エメラルド強調線）
+            ctx.save();
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 3.2;
+            ctx.beginPath();
+            for (let p = 0; p <= 600; p += 6) {
+                const z = calcCompressibilityZ('CH4', p, currentT).Z;
+                const px = toX(p), py = toY(z);
+                if (p === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+            ctx.restore();
+
+            const curZ = calcCompressibilityZ('CH4', currentP, currentT).Z;
+            const cx = toX(currentP), cy = toY(curZ);
+
+            ctx.save();
+            ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.6; ctx.setLineDash([4, 3]);
+            ctx.beginPath(); ctx.moveTo(padL, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, padT + gh); ctx.stroke();
+            ctx.restore();
+
+            drawAxisPill(ctx, padL - 4, cy, curZ.toFixed(2), '#10b981', 'right');
+            drawAxisPill(ctx, cx, padT + gh + 14, `${Math.round(currentP)}`, '#38bdf8', 'center');
+            drawPointMarker(ctx, cx, cy, '#10b981');
+            drawCalloutBox(
+                ctx, cx, cy,
+                `メタン CH₄ (現在温度 T = ${Math.round(currentT)} K)`,
+                `p = ${Math.round(currentP)}×10⁵ Pa ｜ Z = ${curZ.toFixed(2)}`,
+                w, padL, padT
+            );
+        }
+
+        // ③ 資料集 p.112 右上「1 molの実在気体の体積 (0℃, 1.013×10⁵ Pa)」棒グラフ（21.80 L 〜 22.50 L の拡大目盛り）
+        function drawMolarVolumeBarChart(ctx, w, h) {
+            const padL = 62, padR = 28, padT = 28, padB = 54;
+            const gw = w - padL - padR;
+            const gh = h - padT - padB;
+
+            const minV = 21.80, maxV = 22.50;
+            const toY = (v) => padT + (1.0 - (v - minV) / (maxV - minV)) * gh;
+
+            // グリッドと目盛り (21.80, 21.90, ..., 22.40)
+            ctx.font = 'bold 10.5px "Inter", monospace';
+            ctx.textAlign = 'right';
+            [21.80, 21.90, 22.00, 22.10, 22.20, 22.30, 22.40].forEach(v => {
+                const gy = toY(v);
+                ctx.strokeStyle = 'rgba(51, 65, 85, 0.5)';
+                ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + gw, gy); ctx.stroke();
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText(`${v.toFixed(2)} L`, padL - 8, gy + 4);
+            });
+
+            // 座標枠
+            ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(padL, padT - 4); ctx.lineTo(padL, padT + gh); ctx.lineTo(padL + gw, padT + gh);
+            ctx.stroke();
+
+            // 8種類の気体の棒グラフを描画
+            const slotW = gw / MOLAR_VOLUME_BARS.length;
+            const barW = Math.min(38, slotW * 0.56);
+
+            MOLAR_VOLUME_BARS.forEach((item, idx) => {
+                const cx = padL + (idx + 0.5) * slotW;
+                const bx = cx - barW / 2;
+                const by = toY(item.vol);
+                const bh = (padT + gh) - by;
+
+                // 棒のグラデーション
+                const grad = ctx.createLinearGradient(bx, by, bx, padT + gh);
+                grad.addColorStop(0, item.color);
+                grad.addColorStop(1, 'rgba(15, 23, 42, 0.7)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(bx, by, barW, bh);
+
+                ctx.strokeStyle = '#f8fafc';
+                ctx.lineWidth = 1.2;
+                ctx.strokeRect(bx, by, barW, bh);
+
+                // 棒の上の数値 (22.42, 22.09, 21.90 など)
+                ctx.font = 'bold 11px "Inter", monospace';
+                ctx.fillStyle = '#fde047';
+                ctx.textAlign = 'center';
+                ctx.fillText(item.vol.toFixed(2), cx, by - 7);
+
+                // 横軸ラベル：気体名と分子量
+                ctx.font = 'bold 11.5px "Inter", "Noto Sans JP", sans-serif';
+                ctx.fillStyle = '#f8fafc';
+                ctx.fillText(item.formula, cx, padT + gh + 16);
+                ctx.font = '10px "Inter", sans-serif';
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText(`分子量${item.mw}`, cx, padT + gh + 30);
+                ctx.font = 'bold 9.5px "Noto Sans JP", sans-serif';
+                ctx.fillStyle = item.color;
+                ctx.fillText(item.note, cx, padT + gh + 44);
+            });
+
+            // 理想気体の体積 (22.41 L) の赤い破線（資料集と同じく全ての棒を横切る基準線）
+            const y224 = toY(22.41);
+            ctx.save();
+            ctx.strokeStyle = '#f43f5e';
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(padL, y224);
+            ctx.lineTo(padL + gw, y224);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.font = 'bold 11px "Noto Sans JP", sans-serif';
+            ctx.fillStyle = '#fda4af';
+            ctx.textAlign = 'right';
+            ctx.fillText('理想気体の体積 22.4 L (0℃, 1.013×10⁵ Pa)', padL + gw - 6, y224 - 16);
+        }
+
+        // ④ 資料集 p.112 右下「温度の影響：1.01×10⁵ Pa (1 atm) のときの pV/nRT vs 絶対温度 T グラフ」
+        function drawZvsTemperatureLowPGraph(ctx, w, h) {
+            const padL = 62, padR = 26, padT = 24, padB = 42;
+            const gw = w - padL - padR;
+            const gh = h - padT - padB;
+
+            const maxT = 550.0;
+            const minZ = 0.985, maxZ = 1.010;
+            const toX = (t) => padL + (t / maxT) * gw;
+            const toY = (z) => padT + (1.0 - (z - minZ) / (maxZ - minZ)) * gh;
+
+            drawGraphAxesAndGrid(ctx, padL, padT, gw, gh, toX, toY, [0, 100, 200, 300, 400, 500], [0.99, 1.00, 1.01], '絶対温度 T [K]', 'pV / nRT');
+
+            // 理想気体の直線 (Z = 1.00)
+            const yIdeal = toY(1.00);
+            ctx.save();
+            ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2.2; ctx.setLineDash([6, 4]);
+            ctx.beginPath(); ctx.moveTo(padL, yIdeal); ctx.lineTo(padL + gw, yIdeal); ctx.stroke();
+            ctx.restore();
+
+            // H2, N2, CO2 の曲線（高温になるほど 1.00 の理想気体直線へ漸近する！）
+            const species = [
+                { id: 'H2', startT: 80, color: '#f43f5e', label: 'H₂ (つねに理想気体に極めて近い)', lx: 340 },
+                { id: 'N2', startT: 110, color: '#38bdf8', label: 'N₂', lx: 220 },
+                { id: 'CO2', startT: 195, color: '#10b981', label: 'CO₂ (低温でずれが大きく、高温で理想気体に近づく)', lx: 260 }
+            ];
+
+            species.forEach(sp => {
+                ctx.save();
+                ctx.strokeStyle = sp.color;
+                ctx.lineWidth = (activeGasId === sp.id) ? 3.5 : 2.2;
+                ctx.beginPath();
+                for (let t = sp.startT; t <= 520; t += 8) {
+                    const z = calcLowPressureZvsT(sp.id, t);
+                    const px = toX(t), py = toY(z);
+                    if (t === sp.startT) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                }
+                ctx.stroke();
+
+                const zL = calcLowPressureZvsT(sp.id, sp.lx);
+                ctx.font = 'bold 10.5px "Noto Sans JP", sans-serif';
+                ctx.fillStyle = sp.color;
+                ctx.fillText(sp.label, toX(sp.lx), toY(zL) + (sp.id === 'H2' ? -9 : 15));
+                ctx.restore();
+            });
+
+            // 現在温度 currentT マーカー
+            const targetId = ['H2', 'N2', 'CO2'].includes(activeGasId) ? activeGasId : 'CO2';
+            const curZ = calcLowPressureZvsT(targetId, currentT);
+            const cx = toX(currentT), cy = toY(curZ);
+
+            ctx.save();
+            ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.6; ctx.setLineDash([4, 3]);
+            ctx.beginPath(); ctx.moveTo(padL, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, padT + gh); ctx.stroke();
+            ctx.restore();
+
+            drawAxisPill(ctx, padL - 4, cy, curZ.toFixed(4), '#10b981', 'right');
+            drawAxisPill(ctx, cx, padT + gh + 14, `${Math.round(currentT)}K`, '#f43f5e', 'center');
+            drawPointMarker(ctx, cx, cy, GAS_SPECIES[targetId].color);
+            drawCalloutBox(
+                ctx, cx, cy,
+                `1.01×10⁵ Pa (1 atm) での ${GAS_SPECIES[targetId].name}`,
+                `温度 T = ${Math.round(currentT)} K ｜ Z = ${curZ.toFixed(4)}`,
+                w, padL, padT
+            );
+        }
+
+        // グラフ共通ヘルパー
+        function drawGraphAxesAndGrid(ctx, padL, padT, gw, gh, toX, toY, xTicks, yTicks, xTitle, yTitle) {
+            ctx.strokeStyle = 'rgba(51, 65, 85, 0.45)';
+            ctx.lineWidth = 1;
+            ctx.font = 'bold 10.5px "Inter", sans-serif';
+            ctx.fillStyle = '#94a3b8';
+
+            xTicks.forEach(xt => {
+                const gx = toX(xt);
+                ctx.beginPath(); ctx.moveTo(gx, padT); ctx.lineTo(gx, padT + gh); ctx.stroke();
+                ctx.textAlign = 'center';
+                ctx.fillText(`${xt}`, gx, padT + gh + 15);
+            });
+
+            yTicks.forEach(yt => {
+                const gy = toY(yt);
+                ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + gw, gy); ctx.stroke();
+                ctx.textAlign = 'right';
+                ctx.fillText(yt.toFixed(yt < 1.02 && yt > 0.98 ? 2 : 1), padL - 8, gy + 4);
+            });
+
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(padL, padT - 4);
+            ctx.lineTo(padL, padT + gh);
+            ctx.lineTo(padL + gw + 6, padT + gh);
+            ctx.stroke();
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 12px "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(xTitle, padL + gw / 2, padT + gh + 34);
+            ctx.fillText(yTitle, padL - 26, padT + 6);
+        }
+
+        function drawPointMarker(ctx, x, y, color) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(250, 204, 21, 0.28)';
+            ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = color;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath(); ctx.arc(x, y, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawAxisPill(ctx, x, y, text, bgColor, align = 'center') {
+            ctx.save();
+            ctx.font = 'bold 10px "Inter", monospace';
+            const tw = ctx.measureText(text).width;
+            const pw = tw + 10, ph = 16;
+            let rx = x - pw / 2, ry = y - ph / 2;
+            if (align === 'right') rx = x - pw;
+
+            ctx.fillStyle = bgColor;
+            ctx.beginPath(); ctx.roundRect(rx, ry, pw, ph, 4); ctx.fill();
+            ctx.fillStyle = '#0f172a';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(text, rx + pw / 2, ry + ph / 2 + 0.5);
+            ctx.restore();
+        }
+
+        function drawCalloutBox(ctx, cx, cy, line1, line2, canvasW, padL, padT) {
+            ctx.save();
+            ctx.font = 'bold 11px "Inter", "Noto Sans JP", monospace';
+            const boxW = Math.max(ctx.measureText(line1).width, ctx.measureText(line2).width) + 18;
+            const boxH = 38;
+            let bx = cx + 14, by = cy - boxH - 10;
+            if (bx + boxW > canvasW - 12) bx = cx - boxW - 14;
+            if (by < padT + 4) by = cy + 12;
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.roundRect(bx, by, boxW, boxH, 8); ctx.fill(); ctx.stroke();
+
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#fde047';
+            ctx.fillText(line1, bx + 9, by + 15);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText(line2, bx + 9, by + 31);
+            ctx.restore();
+        }
+
+        // =====================================================================
+        // 右下：資料集の比較表・状況別カード描画
+        // =====================================================================
+        function renderBottomInfoCard() {
+            const card = document.getElementById('bottom-info-card');
+            const g = GAS_SPECIES[activeGasId];
+            const zInfo = calcCompressibilityZ(activeGasId, currentP, currentT);
+
+            // 理想気体のモル体積 V_ideal = RT / p [L/mol] (p=1.013×10^5Pa, T=273K で 22.4 L)
+            const vIdeal = 22.41 * (currentT / 273.0) * (1.013 / Math.max(0.5, currentP));
+            const vReal = vIdeal * zInfo.Z;
+
+            card.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-2.5 text-xs items-center">
+                    <!-- 左7列：資料集「理想気体と実在気体の比較表」 -->
+                    <div class="md:col-span-7 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                        <div class="grid grid-cols-3 gap-1.5 text-[11px] border-b border-slate-800 pb-1 mb-1.5 font-bold">
+                            <div class="text-slate-400">比較項目</div>
+                            <div class="text-sky-400 text-center">理想気体 (Ideal gas)</div>
+                            <div class="text-amber-400 text-center">実在気体 (Real gas)</div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-1.5 text-[11px] items-center py-0.5">
+                            <div class="text-slate-400 font-semibold">① 分子自身の体積</div>
+                            <div class="text-center text-slate-200">体積が <strong>0</strong> である</div>
+                            <div class="text-center text-rose-300 font-semibold">大きさをもち、動ける空間が減少</div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-1.5 text-[11px] items-center py-0.5 border-t border-slate-900">
+                            <div class="text-slate-400 font-semibold">② 分子間力(引力)</div>
+                            <div class="text-center text-slate-200"><strong>はたらかない</strong></div>
+                            <div class="text-center text-cyan-300 font-semibold">はたらき、壁への圧力が小さくなる</div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-1.5 text-[11px] items-center pt-1 border-t border-slate-900 font-mono">
+                            <div class="text-slate-400 font-sans font-semibold">③ 状態方程式</div>
+                            <div class="text-center text-sky-300 font-bold">pV ＝ nRT (Z＝1)</div>
+                            <div class="text-center text-amber-300 font-bold">(p+n²a/V²)(V-nb)＝nRT</div>
+                        </div>
+                    </div>
+
+                    <!-- 右5列：現在の気体 (${g.name}) のリアルタイム数値比較 -->
+                    <div class="md:col-span-5 bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-1.5">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-1">
+                            <span class="font-bold text-amber-300">${g.name} (分子量 ${g.mw})</span>
+                            <span class="font-mono text-[11px] px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-bold">
+                                Z = pV/nRT = ${zInfo.Z.toFixed(2)}
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-1.5 font-mono text-[11px]">
+                            <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800">
+                                <div class="text-[10px] font-sans text-slate-400">理想気体1mol体積</div>
+                                <div class="text-sky-300 font-bold">${vIdeal.toFixed(2)} L/mol</div>
+                            </div>
+                            <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800">
+                                <div class="text-[10px] font-sans text-slate-400">実在気体1mol体積</div>
+                                <div class="text-amber-300 font-bold">${vReal.toFixed(2)} L/mol</div>
+                            </div>
+                        </div>
+                        <div class="text-[10.5px] text-slate-300 leading-snug">
+                            <i class="fa-solid fa-circle-info text-emerald-400 mr-1"></i>${g.note}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // =====================================================================
+        // UIイベント・モード切替・スライダー・自動スキャン制御
+        // =====================================================================
+        function selectMode(mode) {
+            currentMode = mode;
+            stopAutoScan();
+
+            const tabs = {
+                'pressure': document.getElementById('tab-pressure'),
+                'methane': document.getElementById('tab-methane'),
+                'volume': document.getElementById('tab-volume'),
+                'temp': document.getElementById('tab-temp')
+            };
+            Object.keys(tabs).forEach(k => {
+                if (k === mode) {
+                    tabs[k].className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-sky-600 text-white shadow flex items-center gap-1.5';
+                } else {
+                    tabs[k].className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white hover:bg-slate-800/70 flex items-center gap-1.5';
+                }
+            });
+
+            const titleEl = document.getElementById('main-graph-title');
+            const pills = document.getElementById('gas-selector-pills');
+
+            if (mode === 'pressure') {
+                titleEl.textContent = `圧力の影響：pV/nRT と 圧力 p [×10⁵ Pa] の関係 (T = ${Math.round(currentT)} K)`;
+                pills.classList.remove('hidden');
+            } else if (mode === 'methane') {
+                activeGasId = 'CH4';
+                updateGasPillsUI();
+                titleEl.textContent = 'メタン(CH₄)と理想気体：温度 (200K / 300K / 500K) による pV/nRT 曲線の変化';
+                pills.classList.add('hidden');
+            } else if (mode === 'volume') {
+                currentP = 1.0;
+                currentT = 273;
+                syncSlidersUI();
+                titleEl.textContent = '1 mol の実在気体の体積 [L] の比較 (0℃, 1.013×10⁵ Pa：理想気体＝22.4 L)';
+                pills.classList.remove('hidden');
+            } else if (mode === 'temp') {
+                currentP = 1.0;
+                syncSlidersUI();
+                titleEl.textContent = '温度の影響：1.01×10⁵ Pa (1 atm) における pV/nRT と 絶対温度 T [K] の関係';
+                pills.classList.remove('hidden');
+            }
+
+            renderBottomInfoCard();
+        }
+
+        function selectGasSpecies(gasId) {
+            activeGasId = gasId;
+            updateGasPillsUI();
+            const g = GAS_SPECIES[gasId];
+            document.getElementById('active-gas-label').textContent = `${g.name} (分子量 ${g.mw})`;
+            renderBottomInfoCard();
+        }
+
+        function updateGasPillsUI() {
+            ['H2', 'N2', 'CH4', 'CO2', 'NH3'].forEach(id => {
+                const btn = document.getElementById(`pill-${id}`);
+                if (!btn) return;
+                if (id === activeGasId) {
+                    btn.className = 'px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white font-bold transition shadow';
+                } else {
+                    btn.className = 'px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white font-semibold transition';
+                }
+            });
+            const g = GAS_SPECIES[activeGasId];
+            document.getElementById('active-gas-label').textContent = `${g.name} (分子量 ${g.mw})`;
+        }
+
+        function setVdWFactor(fMode) {
+            vdwFactorMode = fMode;
+            const map = { 'both': 'btn-factor-both', 'only_a': 'btn-factor-a', 'only_b': 'btn-factor-b' };
+            Object.keys(map).forEach(k => {
+                const btn = document.getElementById(map[k]);
+                if (!btn) return;
+                btn.className = (k === fMode)
+                    ? 'px-2 py-1 rounded-lg bg-sky-600 text-white font-bold transition'
+                    : 'px-2 py-1 rounded-lg text-slate-300 hover:text-white transition';
+            });
+            renderBottomInfoCard();
+        }
+
+        function onPressureSlider(val) {
+            currentP = parseFloat(val);
+            document.getElementById('pressure-val-label').textContent = `${Math.round(currentP)} ×10⁵ Pa`;
+            renderBottomInfoCard();
+        }
+
+        function onTempSlider(val) {
+            currentT = parseFloat(val);
+            document.getElementById('temp-val-label').textContent = `${Math.round(currentT)} K (${Math.round(currentT - 273)}℃)`;
+            if (currentMode === 'pressure') {
+                document.getElementById('main-graph-title').textContent = `圧力の影響：pV/nRT と 圧力 p [×10⁵ Pa] の関係 (T = ${Math.round(currentT)} K)`;
+            }
+            renderBottomInfoCard();
+        }
+
+        function syncSlidersUI() {
+            document.getElementById('pressure-slider').value = Math.round(currentP);
+            document.getElementById('pressure-val-label').textContent = `${Math.round(currentP)} ×10⁵ Pa`;
+            document.getElementById('temp-slider').value = Math.round(currentT);
+            document.getElementById('temp-val-label').textContent = `${Math.round(currentT)} K (${Math.round(currentT - 273)}℃)`;
+        }
+
+        function jumpPreset(preset) {
+            stopAutoScan();
+            if (preset === 'ideal_limit') {
+                currentP = 1.0;
+                currentT = 300;
+            } else if (preset === 'dip_min') {
+                currentP = 95.0;
+                currentT = 273;
+            } else if (preset === 'high_press') {
+                currentP = 520.0;
+                currentT = 273;
+            }
+            syncSlidersUI();
+            renderBottomInfoCard();
+        }
+
+        // 自動スキャンアニメーション
+        function startAutoScan(mode) {
+            scanMode = mode;
+            if (mode === 1) scanLoopDir = 1;
+            if (mode === -1) scanLoopDir = -1;
+            updateAutoButtonsUI();
+        }
+
+        function stopAutoScan() {
+            scanMode = 0;
+            updateAutoButtonsUI();
+        }
+
+        function updateAutoButtonsUI() {
+            ['rev', 'fwd', 'loop'].forEach((k, idx) => {
+                const val = idx === 0 ? -1 : (idx === 1 ? 1 : 2);
+                const btn = document.getElementById(`btn-auto-${k}`);
+                if (!btn) return;
+                btn.classList.toggle('ring-2', scanMode === val);
+                btn.classList.toggle('ring-white', scanMode === val);
+            });
+        }
+
+        function setScanSpeed(spd) {
+            scanSpeed = spd;
+            [0.25, 0.5, 1, 2].forEach(v => {
+                const btn = document.getElementById(`spd-${v}`);
+                if (!btn) return;
+                btn.className = Math.abs(v - spd) < 0.01
+                    ? 'px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white'
+                    : 'px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-400 hover:text-white';
+            });
+        }
+
+        function stepAutoScan() {
+            if (scanMode === 0) return;
+            const dir = (scanMode === 2) ? scanLoopDir : scanMode;
+
+            if (currentMode === 'temp') {
+                // 温度 T (200K ⇄ 520K) をスキャン
+                currentT += dir * 1.2 * scanSpeed;
+                if (currentT >= 520) {
+                    currentT = 520;
+                    if (scanMode === 2) scanLoopDir = -1; else stopAutoScan();
+                } else if (currentT <= 200) {
+                    currentT = 200;
+                    if (scanMode === 2) scanLoopDir = 1; else stopAutoScan();
+                }
+            } else {
+                // 圧力 p (1 ⇄ 600 ×10^5 Pa) をスキャン
+                currentP += dir * 2.2 * scanSpeed;
+                if (currentP >= 600) {
+                    currentP = 600;
+                    if (scanMode === 2) scanLoopDir = -1; else stopAutoScan();
+                } else if (currentP <= 1) {
+                    currentP = 1;
+                    if (scanMode === 2) scanLoopDir = 1; else stopAutoScan();
+                }
+            }
+            syncSlidersUI();
+            renderBottomInfoCard();
+        }
+
+        // グラフ上の直接ドラッグ操作
+        function setupGraphPointerDrag() {
+            let dragging = false;
+            const handlePointer = (clientX) => {
+                if (currentMode === 'volume') return;
+                const rect = gCanvas.getBoundingClientRect();
+                const x = clientX - rect.left;
+                const padL = 58, padR = 26;
+                const gw = rect.width - padL - padR;
+                const nx = Math.max(0.0, Math.min(1.0, (x - padL) / gw));
+
+                if (currentMode === 'temp') {
+                    currentT = Math.max(200, Math.min(520, Math.round(nx * 550)));
+                } else {
+                    currentP = Math.max(1, Math.min(600, Math.round(nx * 600)));
+                }
+                syncSlidersUI();
+                renderBottomInfoCard();
+            };
+
+            gCanvas.addEventListener('pointerdown', (e) => { stopAutoScan(); dragging = true; handlePointer(e.clientX); });
+            window.addEventListener('pointermove', (e) => { if (dragging) handlePointer(e.clientX); });
+            window.addEventListener('pointerup', () => { dragging = false; });
+        }
+
+        function toggleDrawer() {
+            const drawer = document.getElementById('side-drawer');
+            const isClosed = drawer.classList.contains('translate-x-[110%]');
+            drawer.classList.toggle('translate-x-[110%]', !isClosed);
+            drawer.classList.toggle('translate-x-0', isClosed);
+        }
+
+        function resizeCanvases() {
+            const pWrap = document.getElementById('particle-canvas-wrap');
+            const gWrap = document.getElementById('main-graph-wrap');
+            if (pWrap && gWrap) {
+                pCanvas.width = pWrap.clientWidth;
+                pCanvas.height = pWrap.clientHeight;
+                gCanvas.width = gWrap.clientWidth;
+                gCanvas.height = gWrap.clientHeight;
+            }
+        }
+
+        function animateLoop() {
+            requestAnimationFrame(animateLoop);
+            stepAutoScan();
+            drawParticleComparisonCanvas();
+            drawMainGraphCanvas();
+        }
+
+        window.onload = () => {
+            resizeCanvases();
+            renderBottomInfoCard();
+            setupGraphPointerDrag();
+            window.addEventListener('resize', resizeCanvases);
+            animateLoop();
+        };
+    </script>
+</body>
+</html>
